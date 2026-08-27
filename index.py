@@ -5,21 +5,21 @@ from tkinter import messagebox
 
 ARQUIVO_USUARIOS = "usuarios.json"
 
-# Cores utilizadas na interface
-COR_FUNDO = "#170250"
-COR_TEXTO = "#FFFFFF"
-COR_BOTAO = "#6C3FC4"
-COR_BOTAO_HOVER = "#8255D6"
-COR_ENTRADA = "#FFFFFF"
-COR_TEXTO_ENTRADA = "#222222"
-COR_SUCESSO = "#80FF80"
-COR_ERRO = "#FF8080"
+# Cores inspiradas na identidade visual da Unimar
+COR_AZUL = "#0072BC"
+COR_AZUL_ESCURO = "#005A94"
+COR_AZUL_CLARO = "#EAF5FC"
+COR_FUNDO = "#F5F7FA"
+COR_TEXTO = "#1F2933"
+COR_BRANCO = "#FFFFFF"
+COR_SUCESSO = "#16803C"
+COR_ERRO = "#C62828"
 
-# Fontes utilizadas na interface
+# Fontes simples e fáceis de entender
 FONTE_TITULO = ("Arial", 24, "bold")
 FONTE_SUBTITULO = ("Arial", 22, "bold")
 FONTE_PADRAO = ("Arial", 11)
-FONTE_DESTAQUE = ("Arial", 14)
+FONTE_DESTAQUE = ("Arial", 14, "bold")
 FONTE_BOTAO = ("Arial", 11, "bold")
 
 
@@ -54,7 +54,7 @@ def salvar_usuarios(usuarios):
 
 
 def configurar_janela(janela):
-    janela.title("Aplicativo de Chamados")
+    janela.title("Aplicativo de Chamados - Unimar")
     janela.geometry("600x600")
     janela.configure(bg=COR_FUNDO)
     janela.resizable(False, False)
@@ -65,13 +65,27 @@ def limpar_janela(janela):
         widget.destroy()
 
 
-def criar_titulo(janela, texto, fonte=FONTE_TITULO, pady=(50, 25)):
+def criar_cabecalho(janela):
+    cabecalho = tk.Frame(janela, bg=COR_AZUL, height=75)
+    cabecalho.pack(fill="x")
+    cabecalho.pack_propagate(False)
+
+    tk.Label(
+        cabecalho,
+        text="UNIMAR",
+        font=("Arial", 20, "bold"),
+        bg=COR_AZUL,
+        fg=COR_BRANCO,
+    ).pack(side="left", padx=30, pady=18)
+
+
+def criar_titulo(janela, texto, fonte=FONTE_TITULO, pady=(35, 25)):
     tk.Label(
         janela,
         text=texto,
         font=fonte,
         bg=COR_FUNDO,
-        fg=COR_TEXTO,
+        fg=COR_AZUL,
     ).pack(pady=pady)
 
 
@@ -90,12 +104,13 @@ def criar_entrada(janela, show=""):
         janela,
         width=40,
         font=FONTE_PADRAO,
-        bg=COR_ENTRADA,
-        fg=COR_TEXTO_ENTRADA,
-        insertbackground=COR_TEXTO_ENTRADA,
-        relief="flat",
-        bd=0,
+        bg=COR_BRANCO,
+        fg=COR_TEXTO,
+        insertbackground=COR_TEXTO,
+        relief="solid",
+        bd=1,
     )
+
     if show:
         entrada.config(show=show)
 
@@ -109,10 +124,10 @@ def criar_botao(janela, texto, comando):
         text=texto,
         width=20,
         font=FONTE_BOTAO,
-        bg=COR_BOTAO,
-        fg=COR_TEXTO,
-        activebackground=COR_BOTAO_HOVER,
-        activeforeground=COR_TEXTO,
+        bg=COR_AZUL,
+        fg=COR_BRANCO,
+        activebackground=COR_AZUL_ESCURO,
+        activeforeground=COR_BRANCO,
         relief="flat",
         bd=0,
         cursor="hand2",
@@ -182,6 +197,7 @@ def realizar_cadastro(nome, email, senha, confirmar_senha, mensagem):
 
 def abrir_cadastro(janela):
     limpar_janela(janela)
+    criar_cabecalho(janela)
     criar_titulo(janela, "Cadastro")
 
     campos = []
@@ -213,7 +229,8 @@ def abrir_cadastro(janela):
 
 def abrir_login(janela):
     limpar_janela(janela)
-    criar_titulo(janela, "Login", pady=(80, 30))
+    criar_cabecalho(janela)
+    criar_titulo(janela, "Login", pady=(35, 30))
 
     criar_label(janela, "Email")
     email = criar_entrada(janela)
@@ -239,19 +256,22 @@ def abrir_login(janela):
 
 def abrir_inicio(janela, usuario):
     limpar_janela(janela)
+    criar_cabecalho(janela)
     criar_titulo(
         janela,
         "Aplicativo de Chamados",
         fonte=FONTE_SUBTITULO,
-        pady=(80, 20),
+        pady=(45, 20),
     )
 
     tk.Label(
         janela,
         text=f"Usuário: {usuario.get('nome', 'usuário')}",
         font=FONTE_DESTAQUE,
-        bg=COR_FUNDO,
-        fg=COR_TEXTO,
+        bg=COR_AZUL_CLARO,
+        fg=COR_AZUL_ESCURO,
+        padx=20,
+        pady=10,
     ).pack(pady=10)
 
     tk.Label(
