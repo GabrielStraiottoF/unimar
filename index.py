@@ -1,63 +1,143 @@
-#Bibliotecas
-import tkinter as tk
 import json
 import os
+import tkinter as tk
+from tkinter import messagebox
 
-#config padrão
-if not os.path.exists("usuarios.json"):
-    with open("usuarios.json", "w") as arquivo:
-        json.dump({}, arquivo)
-
+ARQUIVO_USUARIOS = "usuarios.json"
 
 
-#Funções
-def config_padrao():
-    janela = tk.Tk()
+def garantir_arquivo_usuarios():
+    if not os.path.exists(ARQUIVO_USUARIOS):
+        salvar_usuarios([])
+        return
+    try:
+        with open(ARQUIVO_USUARIOS, "r", encoding="utf-8") as arquivo:
+            dados = json.load(arquivo)
+        if not isinstance(dados, dict) or not isinstance(dados.get("usuarios"), list):
+            salvar_usuarios([])
+    except (json.JSONDecodeError, OSError):
+        salvar_usuarios([])
+
+
+def carregar_usuarios():
+    garantir_arquivo_usuarios()
+    try:
+        with open(ARQUIVO_USUARIOS, "r", encoding="utf-8") as arquivo:
+            return json.load(arquivo).get("usuarios", [])
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def salvar_usuarios(usuarios):
+    with open(ARQUIVO_USUARIOS, "w", encoding="utf-8") as arquivo:
+        json.dump({"usuarios": usuarios}, arquivo, ensure_ascii=False, indent=4)
+
+
+def configurar_janela(janela):
     janela.title("Aplicativo de Chamados")
     janela.geometry("600x600")
     janela.configure(bg="#170250")
-    return janela
+    janela.resizable(False, False)
 
-def verificar_login(email, senha, mensagem):
-    with open("usuarios.json", "r") as arquivo:
-        dados = json.load(arquivo)
 
-    usuarios = dados.get("usuarios", [])
-    usuario_encontrado = None
+def limpar_janela(janela):
+    for widget in janela.winfo_children():
+        widget.destroy()
 
-    for usuario in usuarios:
-        if usuario["email"] == email and usuario["senha"] == senha:
-            usuario_encontrado = usuario
-            break
 
-    if usuario_encontrado:
-        mensagem.config(text="Login bem-sucedido!", fg="green")
-    else:
-        mensagem.config(text="Email ou senha incorretos.", fg="red")
+def verificar_login(email, senha, mensagem, janela):
+    email = email.strip()
+    senha = senha.strip()
+    if not email or not senha:
+        mensagem.config(text="Informe o email e a senha.", fg="#ff8080")
+        return
 
-def cadastro():
-    config_padrao()
+    for usuario in carregar_usuarios():
+        if usuario.get("email", "").lower() == email.lower() and usuario.get("senha") == senha:
+            mensagem.config(text="Login bem-sucedido!", fg="#80ff80")
+            messagebox.showinfo("Login", f"Bem-vindo(a), {usuario.get('nome', 'usuário')}!")
+            abrir_inicio(janela, usuario)
+            return
 
-def login():
-    config_padrao()
-    email = tk.Entry(janela)
-    email.insert(0, "Email: ")
-    email.pack()
-    email = email.get()
+    mensagem.config(text="Email ou senha incorretos.", fg="#ff8080")
 
-    senha = tk.Entry(janela)
-    senha.insert(0, "Senha: ")
-    senha.pack()
-    senha = senha.get()
 
-    mensagem = tk.Label(janela, text="")
-    mensagem.pack()
-    tk.Button(janela, text="Login", command=lambda: verificar_login(email, senha, mensagem)).pack()
+def realizar_cadastro(nome, email, senha, confirmar_senha, mensagem):
+    nome, email = nome.strip(), email.strip()
+    senha, confirmar_senha = senha.strip(), confirmar_senha.strip()
+
+    if not nome or not email or not senha or not confirmar_senha:
+        mensagem.config(text="Preencha todos os campos.", fg="#ff8080")
+        return
+    if "@" not in email or "." not in email.split("@")[-1]:
+        mensagem.config(text="Informe um email válido.", fg="#ff8080")
+        return
+    if len(senha) < 4:
+        mensagem.config(text="A senha deve ter pelo menos 4 caracteres.", fg="#ff8080")
+        return
+    if senha != confirmar_senha:
+        mensagem.config(text="As senhas não coincidem.", fg="#ff8080")
+        return
+
+    usuarios = carregar_usuarios()
+    if any(u.get("email", "").lower() == email.lower() for u in usuarios):
+        mensagem.config(text="Este email já está cadastrado.", fg="#ff8080")
+        return
+
+    usuarios.append({"nome": nome, "email": email, "senha": senha})
+    salvar_usuarios(usuarios)
+    mensagem.config(text="Cadastro realizado com sucesso!", fg="#80ff80")
+
+
+def abrir_cadastro(janela):
+    limpar_janela(janela)
+    tk.Label(janela, text="Cadastro", font=("Arial", 24, "bold"), bg="#170250", fg="white").pack(pady=(50, 25))
+
+    campos = []
+    for texto in ("Nome", "Email", "Senha", "Confirmar senha"):
+        tk.Label(janela, text=texto, bg="#170250", fg="white").pack()
+        campo = tk.Entry(janela, width=40, show="*" if "Senha" in texto else "")
+        campo.pack(pady=(5, 12))
+        campos.append(campo)
+
+    mensagem = tk.Label(janela, text="", bg="#170250")
+    mensagem.pack(pady=8)
+    tk.Button(janela, text="Cadastrar", width=20, command=lambda: realizar_cadastro(*(c.get() for c in campos), mensagem)).pack(pady=5)
+    tk.Button(janela, text="Voltar para o login", width=20, command=lambda: abrir_login(janela)).pack(pady=5)
+
+
+def abrir_login(janela):
+    limpar_janela(janela)
+    tk.Label(janela, text="Login", font=("Arial", 24, "bold"), bg="#170250", fg="white").pack(pady=(80, 30))
+
+    tk.Label(janela, text="Email", bg="#170250", fg="white").pack()
+    email = tk.Entry(janela, width=40)
+    email.pack(pady=(5, 15))
+    tk.Label(janela, text="Senha", bg="#170250", fg="white").pack()
+    senha = tk.Entry(janela, width=40, show="*")
+    senha.pack(pady=(5, 15))
+
+    mensagem = tk.Label(janela, text="", bg="#170250")
+    mensagem.pack(pady=8)
+    tk.Button(janela, text="Entrar", width=20, command=lambda: verificar_login(email.get(), senha.get(), mensagem, janela)).pack(pady=5)
+    tk.Button(janela, text="Criar cadastro", width=20, command=lambda: abrir_cadastro(janela)).pack(pady=5)
+
+
+def abrir_inicio(janela, usuario):
+    limpar_janela(janela)
+    tk.Label(janela, text="Aplicativo de Chamados", font=("Arial", 22, "bold"), bg="#170250", fg="white").pack(pady=(80, 20))
+    tk.Label(janela, text=f"Usuário: {usuario.get('nome', 'usuário')}", font=("Arial", 14), bg="#170250", fg="white").pack(pady=10)
+    tk.Label(janela, text="Área de chamados ainda em desenvolvimento.", bg="#170250", fg="white").pack(pady=10)
+    tk.Button(janela, text="Sair", width=20, command=lambda: abrir_login(janela)).pack(pady=25)
+
 
 def main():
-    log = tk.Button(janela, text="Login")
-    if log == True:
-        login()
+    garantir_arquivo_usuarios()
+    janela = tk.Tk()
+    configurar_janela(janela)
+    abrir_login(janela)
     janela.mainloop()
 
-main()
+
+if __name__ == "__main__":
+    main()
