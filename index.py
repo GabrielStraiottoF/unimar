@@ -1,9 +1,24 @@
 import json
 import os
+import queue
+import threading
 import tkinter as tk
 from tkinter import messagebox
 
 ARQUIVO_USUARIOS = "usuarios.json"
+
+# -----------------------------------------------------------------------------
+# Configuração do Microsoft Foundry
+# -----------------------------------------------------------------------------
+# O aplicativo procura estas variáveis no ambiente ou em um arquivo .env local:
+# PROJECT_ENDPOINT=https://...services.ai.azure.com/api/projects/...
+# AGENT_ID=...
+#
+# A autenticação usa DefaultAzureCredential. Assim, o projeto pode usar az login
+# durante o desenvolvimento ou as credenciais AZURE_* configuradas no ambiente.
+FOUNDRY_ENDPOINT = "PROJECT_ENDPOINT"
+FOUNDRY_AGENT_ID = "AGENT_ID"
+
 
 # -----------------------------------------------------------------------------
 # Identidade visual UNIMAR
@@ -35,6 +50,115 @@ FONTE_PEQUENA = ("Arial", 9)
 FONTE_MICRO = ("Arial", 8)
 
 
+# -----------------------------------------------------------------------------
+# Configuração simples do .env
+# -----------------------------------------------------------------------------
+def carregar_env():
+    """Carrega um .env local sem adicionar outra biblioteca ao projeto."""
+    caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(caminho):
+        return
+
+    try:
+        with open(caminho, "r", encoding="utf-8") as arquivo:
+            for linha in arquivo:
+                linha = linha.strip()
+                if not linha or linha.startswith("#") or "=" not in linha:
+                    continue
+                chave, valor = linha.split("=", 1)
+                chave = chave.strip()
+                valor = valor.strip().strip('"').strip("'")
+                if chave and chave not in os.environ:
+                    os.environ[chave] = valor
+    except OSError:
+        pass
+
+
+carregar_env()
+
+
+# -----------------------------------------------------------------------------
+# Integração com o Microsoft Foundry
+# -----------------------------------------------------------------------------
+class AssistenteFoundry:
+    """Mantém uma conversa com um agente existente no Microsoft Foundry."""
+
+    def __init__(self):
+        self.client = None
+        self.agent = None
+        self.thread = None
+        self.inicializado = False
+
+    def iniciar(self):
+        endpoint = os.getenv(FOUNDRY_ENDPOINT, "").strip()
+        agent_id = os.getenv(FOUNDRY_AGENT_ID, "").strip()
+
+        if not endpoint or not agent_id:
+            raise ValueError(
+                "Configure PROJECT_ENDPOINT e AGENT_ID no arquivo .env."
+            )
+
+        try:
+            from azure.ai.projects import AIProjectClient
+            from azure.identity import DefaultAzureCredential
+        except ImportError as erro:
+            raise RuntimeError(
+                "As bibliotecas do Foundry ainda não estão instaladas. "
+                "Execute: pip install azure-ai-projects azure-identity"
+            ) from erro
+
+        self.client = AIProjectClient(
+            endpoint=endpoint,
+            credential=DefaultAzureCredential(),
+        )
+        self.agent = self.client.agents.get_agent(agent_id)
+        self.thread = self.client.agents.threads.create()
+        self.inicializado = True
+
+    def perguntar(self, texto):
+        if not self.inicializado:
+            self.iniciar()
+
+        self.client.agents.messages.create(
+            thread_id=self.thread.id,
+            role="user",
+            content=texto,
+        )
+
+        run = self.client.agents.runs.create_and_process(
+            thread_id=self.thread.id,
+            agent_id=self.agent.id,
+        )
+
+        if str(run.status).lower().endswith("failed"):
+            raise RuntimeError(f"O agente não conseguiu responder: {run.last_error}")
+
+        resposta = self.client.agents.messages.get_last_message_by_role(
+            thread_id=self.thread.id,
+            role="agent",
+        )
+
+        if not resposta:
+            return "Não consegui obter uma resposta do agente. Tente novamente."
+
+        textos = []
+        for mensagem in getattr(resposta, "text_messages", []):
+            texto_resposta = getattr(mensagem.text, "value", None)
+            if texto_resposta:
+                textos.append(texto_resposta)
+
+        if textos:
+            return "\n".join(textos)
+
+        return "O agente respondeu, mas não foi possível ler o conteúdo da resposta."
+
+
+assistente = AssistenteFoundry()
+
+
+# -----------------------------------------------------------------------------
+# Arquivo de usuários
+# -----------------------------------------------------------------------------
 def garantir_arquivo_usuarios():
     if not os.path.exists(ARQUIVO_USUARIOS):
         salvar_usuarios([])
@@ -66,7 +190,6 @@ def salvar_usuarios(usuarios):
 # -----------------------------------------------------------------------------
 # Janela responsiva
 # -----------------------------------------------------------------------------
-
 def configurar_janela(janela):
     janela.title("UNIMAR | Central de Chamados")
     largura, altura = 1100, 800
@@ -184,11 +307,7 @@ def criar_campo(parent, texto, show=None):
 
 
 def criar_botao(parent, texto, comando, secundario=False):
-    """Cria um botão com altura garantida, sem depender do cálculo do pack.
-
-    O wrapper evita que o Tkinter comprima o botão quando a janela é
-    redimensionada ou quando o conteúdo do card fica próximo do limite vertical.
-    """
+    """Cria um botão com altura garantida."""
     if secundario:
         fundo = COR_CARTAO
         texto_cor = COR_AZUL
@@ -366,7 +485,6 @@ def criar_painel_lateral(parent):
 # -----------------------------------------------------------------------------
 # Autenticação e cadastro
 # -----------------------------------------------------------------------------
-
 def verificar_login(email, senha, mensagem, janela):
     email = email.strip()
     senha = senha.strip()
@@ -412,9 +530,169 @@ def realizar_cadastro(nome, email, senha, confirmar_senha, mensagem):
 
 
 # -----------------------------------------------------------------------------
+# Chatbot
+# -----------------------------------------------------------------------------
+def adicionar_mensagem_chat(historico, autor, texto, cor):
+    bloco = tk.Frame(historico, bg=COR_CARTAO)
+    bloco.pack(fill="x", pady=(0, 12))
+
+    tk.Label(
+        bloco,
+        text=autor,
+        font=FONTE_LABEL,
+        bg=COR_CARTAO,
+        fg=cor,
+    ).pack(anchor="w")
+
+    tk.Label(
+        bloco,
+        text=texto,
+        font=FONTE_PADRAO,
+        bg=COR_CARTAO,
+        fg=COR_TEXTO,
+        justify="left",
+        anchor="w",
+        wraplength=760,
+    ).pack(fill="x", anchor="w", pady=(3, 0))
+
+
+def abrir_chatbot(janela, usuario):
+    limpar_janela(janela)
+    criar_cabecalho(janela)
+    conteudo = criar_conteudo(janela)
+
+    area = tk.Frame(conteudo, bg=COR_FUNDO)
+    area.pack(fill="both", expand=True, padx=58, pady=24)
+
+    tk.Label(
+        area,
+        text="ASSISTENTE UNIMAR",
+        font=("Arial", 9, "bold"),
+        bg=COR_FUNDO,
+        fg=COR_AZUL,
+    ).pack(anchor="w")
+    tk.Label(
+        area,
+        text="Assistente da Central de Chamados",
+        font=FONTE_TITULO,
+        bg=COR_FUNDO,
+        fg=COR_AZUL_MUITO_ESCURO,
+    ).pack(anchor="w", pady=(3, 2))
+    tk.Label(
+        area,
+        text=f"Olá, {usuario.get('nome', 'usuário')}. Pergunte sobre atendimento e suporte.",
+        font=FONTE_SUBTITULO,
+        bg=COR_FUNDO,
+        fg=COR_TEXTO_SECUNDARIO,
+    ).pack(anchor="w", pady=(0, 14))
+
+    card = tk.Frame(
+        area,
+        bg=COR_CARTAO,
+        highlightbackground=COR_BORDA,
+        highlightthickness=1,
+        padx=24,
+        pady=20,
+    )
+    card.pack(fill="both", expand=True)
+
+    historico = tk.Frame(card, bg=COR_CARTAO)
+    historico.pack(fill="both", expand=True)
+
+    adicionar_mensagem_chat(
+        historico,
+        "ASSISTENTE UNIMAR",
+        "Olá! Sou o assistente da Central de Chamados. Como posso ajudar?",
+        COR_AZUL,
+    )
+
+    entrada_frame = tk.Frame(card, bg=COR_CARTAO)
+    entrada_frame.pack(fill="x", pady=(10, 0))
+
+    entrada = tk.Entry(
+        entrada_frame,
+        font=FONTE_PADRAO,
+        bg=COR_FUNDO,
+        fg=COR_TEXTO,
+        insertbackground=COR_AZUL,
+        relief="flat",
+        bd=0,
+        highlightthickness=1,
+        highlightbackground=COR_BORDA,
+        highlightcolor=COR_AZUL,
+    )
+    entrada.pack(side="left", fill="x", expand=True, ipady=12)
+
+    fila = queue.Queue()
+
+    def processar_resposta():
+        try:
+            tipo, valor = fila.get_nowait()
+        except queue.Empty:
+            janela.after(100, processar_resposta)
+            return
+
+        botao.config(state="normal")
+        entrada.config(state="normal")
+
+        if tipo == "ok":
+            adicionar_mensagem_chat(historico, "ASSISTENTE UNIMAR", valor, COR_AZUL)
+        else:
+            adicionar_mensagem_chat(historico, "SISTEMA", valor, COR_ERRO)
+
+        janela.after(100, processar_resposta)
+
+    def enviar():
+        texto = entrada.get().strip()
+        if not texto:
+            return
+
+        adicionar_mensagem_chat(historico, "VOCÊ", texto, COR_TEXTO_SECUNDARIO)
+        entrada.delete(0, "end")
+        entrada.config(state="disabled")
+        botao.config(state="disabled")
+
+        def consultar():
+            try:
+                resposta = assistente.perguntar(texto)
+                fila.put(("ok", resposta))
+            except Exception as erro:
+                fila.put(("erro", f"Não foi possível consultar o agente: {erro}"))
+
+        threading.Thread(target=consultar, daemon=True).start()
+
+    botao = tk.Button(
+        entrada_frame,
+        text="ENVIAR",
+        font=FONTE_BOTAO,
+        bg=COR_AZUL,
+        fg=COR_CARTAO,
+        activebackground=COR_AZUL_ESCURO,
+        activeforeground=COR_CARTAO,
+        relief="flat",
+        bd=0,
+        cursor="hand2",
+        command=enviar,
+        padx=20,
+        pady=10,
+    )
+    botao.pack(side="right", padx=(10, 0))
+
+    criar_botao(card, "←  VOLTAR PARA A CENTRAL", lambda: abrir_inicio(janela, usuario), secundario=True)
+    criar_aviso(
+        card,
+        "O assistente utiliza um agente configurado no Microsoft Foundry. As credenciais não devem ser colocadas no código.",
+    )
+
+    entrada.bind("<Return>", lambda _event: enviar())
+    entrada.focus_set()
+    criar_rodape(janela)
+    janela.after(100, processar_resposta)
+
+
+# -----------------------------------------------------------------------------
 # Responsividade visual
 # -----------------------------------------------------------------------------
-
 def aplicar_responsividade(janela, area, coluna=None, painel=None):
     if not janela.winfo_exists():
         return
@@ -450,7 +728,6 @@ def registrar_responsividade(janela, area, coluna=None, painel=None):
 # -----------------------------------------------------------------------------
 # Telas
 # -----------------------------------------------------------------------------
-
 def abrir_login(janela):
     limpar_janela(janela)
     criar_cabecalho(janela)
@@ -615,7 +892,7 @@ def abrir_inicio(janela, usuario):
     tk.Label(painel, text="Central de Chamados", font=FONTE_SECAO, bg=COR_CARTAO, fg=COR_TEXTO).pack(anchor="w", pady=(4, 3))
     tk.Label(
         painel,
-        text="A área de chamados está em desenvolvimento. Em breve este ambiente poderá receber as funcionalidades de atendimento do sistema.",
+        text="A área de chamados está em desenvolvimento. Agora você também pode conversar com o Assistente UNIMAR para receber orientação.",
         font=FONTE_PADRAO,
         bg=COR_CARTAO,
         fg=COR_TEXTO_SECUNDARIO,
@@ -623,9 +900,15 @@ def abrir_inicio(janela, usuario):
         justify="left",
     ).pack(anchor="w", fill="x")
 
+    criar_botao(
+        painel,
+        "ABRIR ASSISTENTE UNIMAR",
+        lambda: abrir_chatbot(janela, usuario),
+    )
+
     info = tk.Frame(painel, bg=COR_AZUL_PALETA, padx=16, pady=13)
     info.pack(fill="x", pady=(16, 0))
-    tk.Label(info, text="AMBIENTE INSTITUCIONAL  •  UNIMAR  •  COMUNIDADE ACADÊMICA", font=FONTE_MICRO, bg=COR_AZUL_PALETA, fg=COR_AZUL_MUITO_ESCURO).pack(anchor="w")
+    tk.Label(info, text="ASSISTENTE DE IA  •  MICROSOFT FOUNDRY  •  CENTRAL DE ATENDIMENTO", font=FONTE_MICRO, bg=COR_AZUL_PALETA, fg=COR_AZUL_MUITO_ESCURO).pack(anchor="w")
 
     criar_botao(area, "SAIR DO SISTEMA", lambda: abrir_login(janela), secundario=True)
     criar_rodape(janela)
