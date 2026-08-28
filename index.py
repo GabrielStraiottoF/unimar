@@ -22,7 +22,6 @@ COR_SUCESSO = "#16803C"
 COR_SUCESSO_FUNDO = "#EAF7EF"
 COR_ERRO = "#C62828"
 COR_ERRO_FUNDO = "#FDECEC"
-COR_SOMBRA = "#E5EAF0"
 
 FONTE_MARCA = ("Arial", 25, "bold")
 FONTE_MARCA_SECUNDARIA = ("Arial", 8, "bold")
@@ -65,14 +64,14 @@ def salvar_usuarios(usuarios):
 
 
 # -----------------------------------------------------------------------------
-# Janela e estrutura responsiva
+# Janela responsiva
 # -----------------------------------------------------------------------------
 
 def configurar_janela(janela):
     janela.title("UNIMAR | Central de Chamados")
     largura, altura = 1100, 800
     janela.geometry(f"{largura}x{altura}")
-    janela.minsize(920, 700)
+    janela.minsize(900, 680)
     janela.configure(bg=COR_FUNDO)
 
     janela.update_idletasks()
@@ -94,13 +93,7 @@ def criar_cabecalho(janela):
     marca = tk.Frame(cabecalho, bg=COR_AZUL)
     marca.pack(side="left", padx=48, pady=19)
 
-    tk.Label(
-        marca,
-        text="UNIMAR",
-        font=FONTE_MARCA,
-        bg=COR_AZUL,
-        fg=COR_CARTAO,
-    ).pack(anchor="w")
+    tk.Label(marca, text="UNIMAR", font=FONTE_MARCA, bg=COR_AZUL, fg=COR_CARTAO).pack(anchor="w")
     tk.Label(
         marca,
         text="UNIVERSIDADE DE MARÍLIA",
@@ -108,9 +101,6 @@ def criar_cabecalho(janela):
         bg=COR_AZUL,
         fg=COR_CARTAO,
     ).pack(anchor="w", pady=(1, 0))
-
-    divisor = tk.Frame(cabecalho, bg=COR_CARTAO, width=1, height=46)
-    divisor.place(relx=0.70, rely=0.5, anchor="center")
 
     sistema = tk.Frame(cabecalho, bg=COR_AZUL)
     sistema.pack(side="right", padx=48, pady=19)
@@ -198,21 +188,17 @@ def criar_botao(parent, texto, comando, secundario=False):
         fundo = COR_CARTAO
         texto_cor = COR_AZUL
         hover = COR_AZUL_CLARO
-        borda = COR_AZUL
-        fonte = ("Arial", 11, "bold")
         pady = 13
     else:
         fundo = COR_AZUL
         texto_cor = COR_CARTAO
         hover = COR_AZUL_ESCURO
-        borda = COR_AZUL
-        fonte = FONTE_BOTAO
         pady = 12
 
     botao = tk.Button(
         parent,
         text=texto,
-        font=fonte,
+        font=FONTE_BOTAO,
         bg=fundo,
         fg=texto_cor,
         activebackground=hover,
@@ -228,14 +214,8 @@ def criar_botao(parent, texto, comando, secundario=False):
     )
     botao.pack(fill="x", pady=(7 if secundario else 4, 0), ipady=2)
 
-    def entrar(_event):
-        botao.configure(bg=hover)
-
-    def sair(_event):
-        botao.configure(bg=fundo)
-
-    botao.bind("<Enter>", entrar)
-    botao.bind("<Leave>", sair)
+    botao.bind("<Enter>", lambda _event: botao.configure(bg=hover))
+    botao.bind("<Leave>", lambda _event: botao.configure(bg=fundo))
     return botao
 
 
@@ -294,7 +274,7 @@ def criar_aviso(parent, texto, tipo="info"):
         fg=cor,
         wraplength=560,
         justify="center",
-    ).pack()
+    ).pack(fill="x")
     return aviso
 
 
@@ -324,7 +304,6 @@ def criar_painel_lateral(parent):
     ).pack(anchor="w", pady=(2, 31))
 
     tk.Frame(corpo, bg="#4A83A9", height=1).pack(fill="x", pady=(0, 28))
-
     tk.Label(
         corpo,
         text="AMBIENTE ACADÊMICO",
@@ -363,7 +342,7 @@ def criar_painel_lateral(parent):
 
 
 # -----------------------------------------------------------------------------
-# Autenticação e cadastro — lógica preservada
+# Autenticação e cadastro
 # -----------------------------------------------------------------------------
 
 def verificar_login(email, senha, mensagem, janela):
@@ -411,6 +390,44 @@ def realizar_cadastro(nome, email, senha, confirmar_senha, mensagem):
 
 
 # -----------------------------------------------------------------------------
+# Responsividade visual
+# -----------------------------------------------------------------------------
+
+def aplicar_responsividade(janela, area, coluna=None, painel=None):
+    if not janela.winfo_exists():
+        return
+
+    largura = janela.winfo_width()
+    altura = janela.winfo_height()
+
+    # A área útil cresce sem deixar margens exageradas em monitores grandes.
+    margem = max(28, min(58, largura // 18))
+    area.pack_configure(padx=margem)
+
+    if painel is not None:
+        largura_painel = max(260, min(340, int(largura * 0.29)))
+        painel.configure(width=largura_painel)
+        painel.pack_configure(padx=(0, max(18, min(30, largura // 40))))
+
+    if coluna is not None:
+        coluna.pack_configure(padx=0)
+
+    # Em alturas menores, reduzimos os espaçamentos externos para evitar cortes.
+    if altura < 740:
+        area.pack_configure(pady=18)
+    else:
+        area.pack_configure(pady=28)
+
+
+def registrar_responsividade(janela, area, coluna=None, painel=None):
+    def redimensionar(_event=None):
+        aplicar_responsividade(janela, area, coluna, painel)
+
+    janela.bind("<Configure>", redimensionar, add="+")
+    janela.after_idle(redimensionar)
+
+
+# -----------------------------------------------------------------------------
 # Telas
 # -----------------------------------------------------------------------------
 
@@ -420,9 +437,9 @@ def abrir_login(janela):
     conteudo = criar_conteudo(janela)
 
     area = tk.Frame(conteudo, bg=COR_FUNDO)
-    area.pack(fill="both", expand=True, padx=58, pady=34)
+    area.pack(fill="both", expand=True, padx=58, pady=28)
 
-    criar_painel_lateral(area)
+    painel = criar_painel_lateral(area)
 
     coluna = tk.Frame(area, bg=COR_FUNDO)
     coluna.pack(side="left", fill="both", expand=True)
@@ -460,36 +477,18 @@ def abrir_login(janela):
     card.pack(fill="x")
 
     criar_badge(card, "Acesso seguro ao ambiente")
-    tk.Label(
-        card,
-        text="Acesse sua conta",
-        font=FONTE_SECAO,
-        bg=COR_CARTAO,
-        fg=COR_TEXTO,
-    ).pack(anchor="w", pady=(0, 21))
+    tk.Label(card, text="Acesse sua conta", font=FONTE_SECAO, bg=COR_CARTAO, fg=COR_TEXTO).pack(anchor="w", pady=(0, 21))
 
     email = criar_campo(card, "Email")
     senha = criar_campo(card, "Senha", show="*")
     mensagem = criar_mensagem(card)
 
-    criar_botao(
-        card,
-        "ENTRAR NO SISTEMA",
-        lambda: verificar_login(email.get(), senha.get(), mensagem, janela),
-    )
-    criar_botao(
-        card,
-        "CRIAR NOVO CADASTRO",
-        lambda: abrir_cadastro(janela),
-        secundario=True,
-    )
-
-    criar_aviso(
-        card,
-        "Central de atendimento destinada à comunidade acadêmica da Universidade de Marília.",
-    )
+    criar_botao(card, "ENTRAR NO SISTEMA", lambda: verificar_login(email.get(), senha.get(), mensagem, janela))
+    criar_botao(card, "CRIAR NOVO CADASTRO", lambda: abrir_cadastro(janela), secundario=True)
+    criar_aviso(card, "Central de atendimento destinada à comunidade acadêmica da Universidade de Marília.")
 
     criar_rodape(janela)
+    registrar_responsividade(janela, area, coluna, painel)
     email.focus_set()
 
 
@@ -499,27 +498,15 @@ def abrir_cadastro(janela):
     conteudo = criar_conteudo(janela)
 
     area = tk.Frame(conteudo, bg=COR_FUNDO)
-    area.pack(fill="both", expand=True, padx=58, pady=27)
+    area.pack(fill="both", expand=True, padx=58, pady=22)
 
-    criar_painel_lateral(area)
+    painel = criar_painel_lateral(area)
 
     coluna = tk.Frame(area, bg=COR_FUNDO)
     coluna.pack(side="left", fill="both", expand=True)
 
-    tk.Label(
-        coluna,
-        text="COMUNIDADE UNIMAR",
-        font=("Arial", 9, "bold"),
-        bg=COR_FUNDO,
-        fg=COR_AZUL,
-    ).pack(anchor="w", pady=(0, 6))
-    tk.Label(
-        coluna,
-        text="Criar cadastro",
-        font=("Arial", 25, "bold"),
-        bg=COR_FUNDO,
-        fg=COR_AZUL_MUITO_ESCURO,
-    ).pack(anchor="w")
+    tk.Label(coluna, text="COMUNIDADE UNIMAR", font=("Arial", 9, "bold"), bg=COR_FUNDO, fg=COR_AZUL).pack(anchor="w", pady=(0, 6))
+    tk.Label(coluna, text="Criar cadastro", font=("Arial", 25, "bold"), bg=COR_FUNDO, fg=COR_AZUL_MUITO_ESCURO).pack(anchor="w")
     tk.Label(
         coluna,
         text="Cadastre-se para acessar a Central de Chamados da UNIMAR.",
@@ -549,24 +536,13 @@ def abrir_cadastro(janela):
     criar_botao(
         card,
         "CADASTRAR",
-        lambda: realizar_cadastro(
-            *(campo.get() for campo in campos),
-            mensagem,
-        ),
+        lambda: realizar_cadastro(*(campo.get() for campo in campos), mensagem),
     )
-    criar_botao(
-        card,
-        "←  VOLTAR PARA O LOGIN",
-        lambda: abrir_login(janela),
-        secundario=True,
-    )
-
-    criar_aviso(
-        card,
-        "O cadastro continua utilizando o armazenamento local existente em usuarios.json.",
-    )
+    criar_botao(card, "←  VOLTAR PARA O LOGIN", lambda: abrir_login(janela), secundario=True)
+    criar_aviso(card, "O cadastro continua utilizando o armazenamento local existente em usuarios.json.")
 
     criar_rodape(janela)
+    registrar_responsividade(janela, area, coluna, painel)
     campos[0].focus_set()
 
 
@@ -578,20 +554,8 @@ def abrir_inicio(janela, usuario):
     area = tk.Frame(conteudo, bg=COR_FUNDO)
     area.pack(fill="both", expand=True, padx=58, pady=28)
 
-    tk.Label(
-        area,
-        text="AMBIENTE ACADÊMICO",
-        font=("Arial", 9, "bold"),
-        bg=COR_FUNDO,
-        fg=COR_AZUL,
-    ).pack(anchor="w")
-    tk.Label(
-        area,
-        text="Central de Chamados",
-        font=FONTE_TITULO,
-        bg=COR_FUNDO,
-        fg=COR_AZUL_MUITO_ESCURO,
-    ).pack(anchor="w", pady=(3, 2))
+    tk.Label(area, text="AMBIENTE ACADÊMICO", font=("Arial", 9, "bold"), bg=COR_FUNDO, fg=COR_AZUL).pack(anchor="w")
+    tk.Label(area, text="Central de Chamados", font=FONTE_TITULO, bg=COR_FUNDO, fg=COR_AZUL_MUITO_ESCURO).pack(anchor="w", pady=(3, 2))
     tk.Label(
         area,
         text="Bem-vindo ao ambiente institucional de atendimento da UNIMAR.",
@@ -602,92 +566,33 @@ def abrir_inicio(janela, usuario):
 
     topo = tk.Frame(area, bg=COR_FUNDO)
     topo.pack(fill="x")
+    topo.columnconfigure(0, weight=1)
+    topo.columnconfigure(1, weight=1)
 
-    card_usuario = tk.Frame(
-        topo,
-        bg=COR_CARTAO,
-        highlightbackground=COR_BORDA,
-        highlightthickness=1,
-        padx=26,
-        pady=22,
-    )
-    card_usuario.pack(side="left", fill="both", expand=True, padx=(0, 12))
-    tk.Label(
-        card_usuario,
-        text="USUÁRIO CONECTADO",
-        font=FONTE_MICRO,
-        bg=COR_CARTAO,
-        fg=COR_AZUL,
-    ).pack(anchor="w")
-    tk.Label(
-        card_usuario,
-        text=usuario.get("nome", "usuário"),
-        font=("Arial", 19, "bold"),
-        bg=COR_CARTAO,
-        fg=COR_TEXTO,
-    ).pack(anchor="w", pady=(5, 1))
-    tk.Label(
-        card_usuario,
-        text=usuario.get("email", ""),
-        font=FONTE_PEQUENA,
-        bg=COR_CARTAO,
-        fg=COR_TEXTO_SECUNDARIO,
-    ).pack(anchor="w")
+    card_usuario = tk.Frame(topo, bg=COR_CARTAO, highlightbackground=COR_BORDA, highlightthickness=1, padx=26, pady=22)
+    card_usuario.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+    tk.Label(card_usuario, text="USUÁRIO CONECTADO", font=FONTE_MICRO, bg=COR_CARTAO, fg=COR_AZUL).pack(anchor="w")
+    tk.Label(card_usuario, text=usuario.get("nome", "usuário"), font=("Arial", 19, "bold"), bg=COR_CARTAO, fg=COR_TEXTO).pack(anchor="w", pady=(5, 1))
+    tk.Label(card_usuario, text=usuario.get("email", ""), font=FONTE_PEQUENA, bg=COR_CARTAO, fg=COR_TEXTO_SECUNDARIO).pack(anchor="w")
 
-    card_institucional = tk.Frame(
-        topo,
-        bg=COR_AZUL_MUITO_ESCURO,
-        padx=26,
-        pady=22,
-    )
-    card_institucional.pack(side="right", fill="both", expand=True, padx=(12, 0))
+    card_institucional = tk.Frame(topo, bg=COR_AZUL_MUITO_ESCURO, padx=26, pady=22)
+    card_institucional.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+    tk.Label(card_institucional, text="UNIVERSIDADE DE MARÍLIA", font=FONTE_MICRO, bg=COR_AZUL_MUITO_ESCURO, fg="#A9D5EC").pack(anchor="w")
+    tk.Label(card_institucional, text="Atendimento institucional", font=("Arial", 17, "bold"), bg=COR_AZUL_MUITO_ESCURO, fg=COR_CARTAO).pack(anchor="w", pady=(5, 2))
     tk.Label(
         card_institucional,
-        text="UNIVERSIDADE DE MARÍLIA",
-        font=FONTE_MICRO,
-        bg=COR_AZUL_MUITO_ESCURO,
-        fg="#A9D5EC",
-    ).pack(anchor="w")
-    tk.Label(
-        card_institucional,
-        text="Atendimento institucional",
-        font=("Arial", 17, "bold"),
-        bg=COR_AZUL_MUITO_ESCURO,
-        fg=COR_CARTAO,
-    ).pack(anchor="w", pady=(5, 2))
-    tk.Label(
-        card_institucional,
-        text="Um ambiente preparado para apoiar\na comunidade acadêmica.",
+        text="Um ambiente preparado para apoiar a comunidade acadêmica.",
         font=FONTE_PEQUENA,
         bg=COR_AZUL_MUITO_ESCURO,
         fg="#D7EBF7",
         justify="left",
+        wraplength=430,
     ).pack(anchor="w")
 
-    painel = tk.Frame(
-        area,
-        bg=COR_CARTAO,
-        highlightbackground=COR_BORDA,
-        highlightthickness=1,
-        padx=28,
-        pady=24,
-    )
+    painel = tk.Frame(area, bg=COR_CARTAO, highlightbackground=COR_BORDA, highlightthickness=1, padx=28, pady=24)
     painel.pack(fill="x", pady=20)
-
-    tk.Label(
-        painel,
-        text="ATENDIMENTO E SUPORTE",
-        font=FONTE_MICRO,
-        bg=COR_CARTAO,
-        fg=COR_AZUL,
-    ).pack(anchor="w")
-    tk.Label(
-        painel,
-        text="Central de Chamados",
-        font=FONTE_SECAO,
-        bg=COR_CARTAO,
-        fg=COR_TEXTO,
-    ).pack(anchor="w", pady=(4, 3))
+    tk.Label(painel, text="ATENDIMENTO E SUPORTE", font=FONTE_MICRO, bg=COR_CARTAO, fg=COR_AZUL).pack(anchor="w")
+    tk.Label(painel, text="Central de Chamados", font=FONTE_SECAO, bg=COR_CARTAO, fg=COR_TEXTO).pack(anchor="w", pady=(4, 3))
     tk.Label(
         painel,
         text="A área de chamados está em desenvolvimento. Em breve este ambiente poderá receber as funcionalidades de atendimento do sistema.",
@@ -696,26 +601,15 @@ def abrir_inicio(janela, usuario):
         fg=COR_TEXTO_SECUNDARIO,
         wraplength=900,
         justify="left",
-    ).pack(anchor="w")
+    ).pack(anchor="w", fill="x")
 
     info = tk.Frame(painel, bg=COR_AZUL_PALETA, padx=16, pady=13)
     info.pack(fill="x", pady=(16, 0))
-    tk.Label(
-        info,
-        text="AMBIENTE INSTITUCIONAL  •  UNIMAR  •  COMUNIDADE ACADÊMICA",
-        font=FONTE_MICRO,
-        bg=COR_AZUL_PALETA,
-        fg=COR_AZUL_MUITO_ESCURO,
-    ).pack(anchor="w")
+    tk.Label(info, text="AMBIENTE INSTITUCIONAL  •  UNIMAR  •  COMUNIDADE ACADÊMICA", font=FONTE_MICRO, bg=COR_AZUL_PALETA, fg=COR_AZUL_MUITO_ESCURO).pack(anchor="w")
 
-    criar_botao(
-        area,
-        "SAIR DO SISTEMA",
-        lambda: abrir_login(janela),
-        secundario=True,
-    )
-
+    criar_botao(area, "SAIR DO SISTEMA", lambda: abrir_login(janela), secundario=True)
     criar_rodape(janela)
+    registrar_responsividade(janela, area)
 
 
 def main():
