@@ -1,0 +1,10 @@
+{
+    "usuarios": [
+        {
+            "nome": "Técnico UNIMAR",
+            "email": "tecnico@unimar.br",
+            "senha": "tecnico123",
+            "tipo": "tecnico"
+        }
+    ]
+}
