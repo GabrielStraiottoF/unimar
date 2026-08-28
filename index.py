@@ -6,14 +6,6 @@ import tkinter as tk
 from tkinter import messagebox
 
 ARQUIVO_USUARIOS = "usuarios.json"
-
-# -----------------------------------------------------------------------------
-# Configuração do Microsoft Foundry
-# -----------------------------------------------------------------------------
-# Use um arquivo .env local com:
-# FOUNDRY_ENDPOINT=https://...
-# FOUNDRY_API_KEY=...
-# FOUNDRY_MODEL=...
 FOUNDRY_ENDPOINT = "FOUNDRY_ENDPOINT"
 FOUNDRY_API_KEY = "FOUNDRY_API_KEY"
 FOUNDRY_MODEL = "FOUNDRY_MODEL"
@@ -66,8 +58,6 @@ carregar_env()
 
 
 class AssistenteFoundry:
-    """Conversa com um modelo implantado no Microsoft Foundry usando API key."""
-
     def __init__(self):
         self.client = None
         self.modelo = None
@@ -77,23 +67,15 @@ class AssistenteFoundry:
         endpoint = os.getenv(FOUNDRY_ENDPOINT, "").strip()
         api_key = os.getenv(FOUNDRY_API_KEY, "").strip()
         modelo = os.getenv(FOUNDRY_MODEL, "").strip()
-
         if not endpoint or not api_key or not modelo:
-            raise ValueError(
-                "Configure FOUNDRY_ENDPOINT, FOUNDRY_API_KEY e FOUNDRY_MODEL no .env."
-            )
-
+            raise ValueError("Configure FOUNDRY_ENDPOINT, FOUNDRY_API_KEY e FOUNDRY_MODEL no .env.")
         try:
             from openai import OpenAI
         except ImportError as erro:
-            raise RuntimeError(
-                "A biblioteca OpenAI não está instalada. Execute: pip install openai"
-            ) from erro
-
+            raise RuntimeError("A biblioteca OpenAI não está instalada. Execute: pip install openai") from erro
         endpoint = endpoint.rstrip("/")
         if not endpoint.endswith("/openai/v1"):
             endpoint = f"{endpoint}/openai/v1"
-
         self.client = OpenAI(base_url=f"{endpoint}/", api_key=api_key)
         self.modelo = modelo
         self.inicializado = True
@@ -101,35 +83,21 @@ class AssistenteFoundry:
     def perguntar(self, texto):
         if not self.inicializado:
             self.iniciar()
-
         try:
-            resposta = self.client.responses.create(
-                model=self.modelo,
-                input=texto,
-            )
+            resposta = self.client.responses.create(model=self.modelo, input=texto)
             return resposta.output_text
         except Exception as erro_responses:
             try:
                 resposta = self.client.chat.completions.create(
                     model=self.modelo,
                     messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "Você é o Assistente UNIMAR, um chatbot de apoio à "
-                                "Central de Chamados. Responda de forma clara, "
-                                "educada e adequada para estudantes."
-                            ),
-                        },
+                        {"role": "system", "content": "Você é o Assistente UNIMAR, um chatbot de apoio à Central de Chamados. Responda de forma clara, educada e adequada para estudantes."},
                         {"role": "user", "content": texto},
                     ],
                 )
                 return resposta.choices[0].message.content
             except Exception as erro_chat:
-                raise RuntimeError(
-                    "Não foi possível consultar o modelo. "
-                    f"Responses: {erro_responses}; Chat Completions: {erro_chat}"
-                ) from erro_chat
+                raise RuntimeError(f"Não foi possível consultar o modelo. Responses: {erro_responses}; Chat Completions: {erro_chat}") from erro_chat
 
 
 assistente = AssistenteFoundry()
@@ -166,7 +134,7 @@ def configurar_janela(janela):
     janela.title("UNIMAR | Central de Chamados")
     largura, altura = 1100, 800
     janela.geometry(f"{largura}x{altura}")
-    janela.minsize(900, 680)
+    janela.minsize(720, 560)
     janela.configure(bg=COR_FUNDO)
     janela.update_idletasks()
     x = max((janela.winfo_screenwidth() - largura) // 2, 0)
@@ -222,11 +190,19 @@ def criar_botao(parent, texto, comando, secundario=False):
     fundo = COR_CARTAO if secundario else COR_AZUL
     texto_cor = COR_AZUL if secundario else COR_CARTAO
     hover = COR_AZUL_CLARO if secundario else COR_AZUL_ESCURO
-    altura = 56 if secundario else 52
-    container = tk.Frame(parent, bg=COR_BORDA if secundario else fundo, height=altura)
-    container.pack(fill="x", pady=(8 if secundario else 5, 0))
+    altura = 54 if secundario else 50
+    container = tk.Frame(parent, bg=COR_BORDA if secundario else fundo)
+    container.pack(fill="x", pady=(7 if secundario else 4, 0))
+    container.grid_propagate(False)
+    container.configure(height=altura)
     container.pack_propagate(False)
-    botao = tk.Button(container, text=texto, font=FONTE_BOTAO, bg=fundo, fg=texto_cor, activebackground=hover, activeforeground=texto_cor, relief="solid" if secundario else "flat", bd=1 if secundario else 0, highlightthickness=0, cursor="hand2", command=comando, padx=22, pady=0)
+    botao = tk.Button(
+        container, text=texto, font=FONTE_BOTAO, bg=fundo, fg=texto_cor,
+        activebackground=hover, activeforeground=texto_cor,
+        relief="solid" if secundario else "flat", bd=1 if secundario else 0,
+        highlightthickness=0, cursor="hand2", command=comando, padx=14, pady=0,
+        anchor="center", wraplength=600,
+    )
     botao.pack(fill="both", expand=True, padx=1 if secundario else 0, pady=1 if secundario else 0)
     botao.bind("<Enter>", lambda _e: botao.configure(bg=hover))
     botao.bind("<Leave>", lambda _e: botao.configure(bg=fundo))
@@ -366,35 +342,49 @@ def abrir_chatbot(janela, usuario):
         entrada.delete(0, "end")
         entrada.config(state="disabled")
         botao.config(state="disabled")
-
         def consultar():
             try:
                 fila.put(("ok", assistente.perguntar(texto)))
             except Exception as erro:
-                fila.put(("erro", f"Não foi possível consultar o modelo: {erro}"))
-
+                fila.put(("erro", f"Não foi possível consultar o agente: {erro}"))
         threading.Thread(target=consultar, daemon=True).start()
 
-    botao = tk.Button(entrada_frame, text="ENVIAR", font=FONTE_BOTAO, bg=COR_AZUL, fg=COR_CARTAO, activebackground=COR_AZUL_ESCURO, activeforeground=COR_CARTAO, relief="flat", bd=0, cursor="hand2", command=enviar, padx=20, pady=10)
-    botao.pack(side="right", padx=(10, 0))
+    botao = criar_botao(entrada_frame, "ENVIAR", enviar)
+    botao.pack_forget()
+    botao.pack(side="right", fill="y", padx=(10, 0))
     criar_botao(card, "←  VOLTAR PARA A CENTRAL", lambda: abrir_inicio(janela, usuario), secundario=True)
-    criar_aviso(card, "O assistente utiliza um modelo configurado no Microsoft Foundry. A API key fica somente no arquivo .env local.")
+    criar_aviso(card, "O assistente utiliza um agente configurado no Microsoft Foundry. As credenciais não devem ser colocadas no código.")
     entrada.bind("<Return>", lambda _event: enviar())
     entrada.focus_set()
     criar_rodape(janela)
     janela.after(100, processar_resposta)
 
 
+def aplicar_responsividade(janela, area, coluna=None, painel=None):
+    if not janela.winfo_exists():
+        return
+    largura = janela.winfo_width()
+    altura = janela.winfo_height()
+    margem = max(18, min(58, largura // 18))
+    area.pack_configure(padx=margem)
+    if painel is not None:
+        if largura < 850:
+            painel.pack_forget()
+        elif not painel.winfo_ismapped():
+            painel.pack(side="left", fill="y", padx=(0, max(18, min(30, largura // 40))) )
+        largura_painel = max(230, min(310, int(largura * 0.29)))
+        painel.configure(width=largura_painel)
+    if coluna is not None:
+        coluna.pack_configure(padx=0)
+    if altura < 700:
+        area.pack_configure(pady=12)
+    else:
+        area.pack_configure(pady=24)
+
+
 def registrar_responsividade(janela, area, coluna=None, painel=None):
     def redimensionar(_event=None):
-        if not janela.winfo_exists():
-            return
-        largura = janela.winfo_width()
-        altura = janela.winfo_height()
-        area.pack_configure(padx=max(28, min(58, largura // 18)), pady=18 if altura < 740 else 28)
-        if painel is not None:
-            painel.configure(width=max(260, min(340, int(largura * 0.29))))
-            painel.pack_configure(padx=(0, max(18, min(30, largura // 40))))
+        aplicar_responsividade(janela, area, coluna, painel)
     janela.bind("<Configure>", redimensionar, add="+")
     janela.after_idle(redimensionar)
 
@@ -481,7 +471,7 @@ def abrir_inicio(janela, usuario):
     criar_botao(painel, "ABRIR ASSISTENTE UNIMAR", lambda: abrir_chatbot(janela, usuario))
     info = tk.Frame(painel, bg=COR_AZUL_PALETA, padx=16, pady=13)
     info.pack(fill="x", pady=(16, 0))
-    tk.Label(info, text="ASSISTENTE DE IA  •  MICROSOFT FOUNDRY  •  API KEY", font=FONTE_MICRO, bg=COR_AZUL_PALETA, fg=COR_AZUL_MUITO_ESCURO).pack(anchor="w")
+    tk.Label(info, text="ASSISTENTE DE IA  •  MICROSOFT FOUNDRY  •  CENTRAL DE ATENDIMENTO", font=FONTE_MICRO, bg=COR_AZUL_PALETA, fg=COR_AZUL_MUITO_ESCURO).pack(anchor="w")
     criar_botao(area, "SAIR DO SISTEMA", lambda: abrir_login(janela), secundario=True)
     criar_rodape(janela)
     registrar_responsividade(janela, area)
