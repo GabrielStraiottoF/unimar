@@ -184,19 +184,34 @@ def criar_campo(parent, texto, show=None):
 
 
 def criar_botao(parent, texto, comando, secundario=False):
+    """Cria um botão com altura garantida, sem depender do cálculo do pack.
+
+    O wrapper evita que o Tkinter comprima o botão quando a janela é
+    redimensionada ou quando o conteúdo do card fica próximo do limite vertical.
+    """
     if secundario:
         fundo = COR_CARTAO
         texto_cor = COR_AZUL
         hover = COR_AZUL_CLARO
-        pady = 13
+        altura = 56
+        margem_superior = 8
     else:
         fundo = COR_AZUL
         texto_cor = COR_CARTAO
         hover = COR_AZUL_ESCURO
-        pady = 12
+        altura = 52
+        margem_superior = 5
+
+    container = tk.Frame(
+        parent,
+        bg=COR_BORDA if secundario else fundo,
+        height=altura,
+    )
+    container.pack(fill="x", pady=(margem_superior, 0))
+    container.pack_propagate(False)
 
     botao = tk.Button(
-        parent,
+        container,
         text=texto,
         font=FONTE_BOTAO,
         bg=fundo,
@@ -209,13 +224,20 @@ def criar_botao(parent, texto, comando, secundario=False):
         cursor="hand2",
         command=comando,
         padx=22,
-        pady=pady,
-        height=1,
+        pady=0,
+        anchor="center",
+        takefocus=True,
     )
-    botao.pack(fill="x", pady=(7 if secundario else 4, 0), ipady=2)
+    botao.pack(fill="both", expand=True, padx=1 if secundario else 0, pady=1 if secundario else 0)
 
-    botao.bind("<Enter>", lambda _event: botao.configure(bg=hover))
-    botao.bind("<Leave>", lambda _event: botao.configure(bg=fundo))
+    def entrar(_event):
+        botao.configure(bg=hover)
+
+    def sair(_event):
+        botao.configure(bg=fundo)
+
+    botao.bind("<Enter>", entrar)
+    botao.bind("<Leave>", sair)
     return botao
 
 
@@ -400,7 +422,6 @@ def aplicar_responsividade(janela, area, coluna=None, painel=None):
     largura = janela.winfo_width()
     altura = janela.winfo_height()
 
-    # A área útil cresce sem deixar margens exageradas em monitores grandes.
     margem = max(28, min(58, largura // 18))
     area.pack_configure(padx=margem)
 
@@ -412,7 +433,6 @@ def aplicar_responsividade(janela, area, coluna=None, painel=None):
     if coluna is not None:
         coluna.pack_configure(padx=0)
 
-    # Em alturas menores, reduzimos os espaçamentos externos para evitar cortes.
     if altura < 740:
         area.pack_configure(pady=18)
     else:
