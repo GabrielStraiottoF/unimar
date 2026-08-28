@@ -1,17 +1,20 @@
-import json
-import os
 import queue
 import threading
 import tkinter as tk
-from datetime import datetime
 from tkinter import messagebox, ttk
 
-ARQUIVO_USUARIOS = "usuarios.json"
-ARQUIVO_CHAMADOS = "chamados.json"
-TECNICO_PADRAO = {"nome": "Técnico UNIMAR", "email": "tecnico@unimar.br", "senha": "tecnico123", "tipo": "tecnico"}
-FOUNDRY_ENDPOINT = "FOUNDRY_ENDPOINT"
-FOUNDRY_API_KEY = "FOUNDRY_API_KEY"
-FOUNDRY_MODEL = "FOUNDRY_MODEL"
+from sistema import (
+    TECNICO_PADRAO,
+    assistente,
+    autenticar,
+    chamados_do_usuario,
+    carregar_chamados,
+    cadastrar_usuario,
+    criar_chamado,
+    departamentos,
+    finalizar_chamado,
+    garantir_arquivos,
+)
 
 COR_AZUL = "#0072BC"
 COR_AZUL_ESCURO = "#005A94"
@@ -33,102 +36,6 @@ F_NORMAL = ("Arial", 11)
 F_BOTAO = ("Arial", 11, "bold")
 F_PEQUENA = ("Arial", 9)
 F_MICRO = ("Arial", 8, "bold")
-
-
-def carregar_env():
-    caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-    if not os.path.exists(caminho):
-        return
-    try:
-        with open(caminho, "r", encoding="utf-8") as f:
-            for linha in f:
-                linha = linha.strip()
-                if not linha or linha.startswith("#") or "=" not in linha:
-                    continue
-                chave, valor = linha.split("=", 1)
-                os.environ.setdefault(chave.strip(), valor.strip().strip('"').strip("'"))
-    except OSError:
-        pass
-
-
-carregar_env()
-
-
-class AssistenteFoundry:
-    def __init__(self):
-        self.client = None
-        self.modelo = None
-
-    def iniciar(self):
-        endpoint = os.getenv(FOUNDRY_ENDPOINT, "").strip()
-        chave = os.getenv(FOUNDRY_API_KEY, "").strip()
-        modelo = os.getenv(FOUNDRY_MODEL, "").strip()
-        if not endpoint or not chave or not modelo:
-            raise ValueError("Configure FOUNDRY_ENDPOINT, FOUNDRY_API_KEY e FOUNDRY_MODEL no .env.")
-        try:
-            from openai import OpenAI
-        except ImportError as erro:
-            raise RuntimeError("Instale a biblioteca OpenAI com: pip install openai") from erro
-        endpoint = endpoint.rstrip("/")
-        if not endpoint.endswith("/openai/v1"):
-            endpoint += "/openai/v1"
-        self.client = OpenAI(base_url=endpoint + "/", api_key=chave)
-        self.modelo = modelo
-
-    def perguntar(self, texto):
-        if not self.client:
-            self.iniciar()
-        resposta = self.client.chat.completions.create(
-            model=self.modelo,
-            messages=[
-                {"role": "system", "content": "Você é o Assistente UNIMAR. Ajude estudantes com dúvidas sobre a Central de Chamados e suporte de informática. Responda de forma clara e simples."},
-                {"role": "user", "content": texto},
-            ],
-        )
-        return resposta.choices[0].message.content
-
-
-assistente = AssistenteFoundry()
-
-
-def salvar_json(caminho, dados):
-    with open(caminho, "w", encoding="utf-8") as f:
-        json.dump(dados, f, ensure_ascii=False, indent=4)
-
-
-def carregar_json(caminho, padrao):
-    try:
-        with open(caminho, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return padrao
-
-
-def garantir_arquivos():
-    usuarios = carregar_json(ARQUIVO_USUARIOS, {"usuarios": []})
-    if not isinstance(usuarios, dict) or not isinstance(usuarios.get("usuarios"), list):
-        usuarios = {"usuarios": []}
-    lista = usuarios["usuarios"]
-    if not any(u.get("tipo") == "tecnico" and u.get("email", "").lower() == TECNICO_PADRAO["email"] for u in lista):
-        lista.append(dict(TECNICO_PADRAO))
-    salvar_json(ARQUIVO_USUARIOS, usuarios)
-    chamados = carregar_json(ARQUIVO_CHAMADOS, {"chamados": []})
-    if not isinstance(chamados, dict) or not isinstance(chamados.get("chamados"), list):
-        salvar_json(ARQUIVO_CHAMADOS, {"chamados": []})
-
-
-def carregar_usuarios():
-    garantir_arquivos()
-    return carregar_json(ARQUIVO_USUARIOS, {"usuarios": []}).get("usuarios", [])
-
-
-def carregar_chamados():
-    garantir_arquivos()
-    return carregar_json(ARQUIVO_CHAMADOS, {"chamados": []}).get("chamados", [])
-
-
-def salvar_chamados(chamados):
-    salvar_json(ARQUIVO_CHAMADOS, {"chamados": chamados})
 
 
 def limpar(janela):
@@ -192,15 +99,14 @@ def mostrar_login(janela):
     mensagem.pack(fill="x", pady=4)
 
     def entrar():
-        e, s = email.get().strip(), senha.get().strip()
-        for usuario in carregar_usuarios():
-            if usuario.get("email", "").lower() == e.lower() and usuario.get("senha") == s:
-                if usuario.get("tipo") == "tecnico":
-                    abrir_painel_tecnico(janela, usuario)
-                else:
-                    abrir_inicio_usuario(janela, usuario)
-                return
-        mensagem.config(text="Email ou senha incorretos.", fg=COR_ERRO)
+        usuario = autenticar(email.get(), senha.get())
+        if usuario:
+            if usuario.get("tipo") == "tecnico":
+                abrir_painel_tecnico(janela, usuario)
+            else:
+                abrir_inicio_usuario(janela, usuario)
+        else:
+            mensagem.config(text="Email ou senha incorretos.", fg=COR_ERRO)
 
     botao(card, "ENTRAR NO SISTEMA", entrar)
     botao(card, "CRIAR NOVO CADASTRO", lambda: abrir_cadastro(janela), True)
@@ -225,18 +131,11 @@ def abrir_cadastro(janela):
     msg.pack(fill="x")
 
     def cadastrar():
-        n, e, s, c = nome.get().strip(), email.get().strip(), senha.get(), confirma.get()
-        if not n or not e or not s or not c:
-            msg.config(text="Preencha todos os campos.", fg=COR_ERRO); return
-        if s != c:
-            msg.config(text="As senhas não coincidem.", fg=COR_ERRO); return
-        usuarios = carregar_usuarios()
-        if any(u.get("email", "").lower() == e.lower() for u in usuarios):
-            msg.config(text="Este email já está cadastrado.", fg=COR_ERRO); return
-        usuarios.append({"nome": n, "email": e, "senha": s, "tipo": "usuario"})
-        salvar_json(ARQUIVO_USUARIOS, {"usuarios": usuarios})
-        messagebox.showinfo("Cadastro", "Cadastro realizado com sucesso!")
-        mostrar_login(janela)
+        ok, texto = cadastrar_usuario(nome.get(), email.get(), senha.get(), confirma.get())
+        msg.config(text=texto, fg=COR_SUCESSO if ok else COR_ERRO)
+        if ok:
+            messagebox.showinfo("Cadastro", texto)
+            mostrar_login(janela)
 
     botao(card, "CADASTRAR", cadastrar)
     botao(card, "VOLTAR PARA O LOGIN", lambda: mostrar_login(janela), True)
@@ -282,16 +181,11 @@ def abrir_novo_chamado(janela, usuario):
     msg.pack(fill="x")
 
     def criar():
-        dep, eq, desc, hora = departamento.get().strip(), equipamento.get().strip(), descricao.get("1.0", "end").strip(), inicio.get().strip()
-        if not dep or not eq or not desc or not hora:
-            msg.config(text="Preencha todos os campos.", fg=COR_ERRO); return
-        chamados = carregar_chamados()
-        novo_id = max([int(c.get("id", 0)) for c in chamados if str(c.get("id", "0")).isdigit()] or [0]) + 1
-        agora = datetime.now().strftime("%d/%m/%Y %H:%M")
-        chamados.append({"id": novo_id, "departamento": dep, "nome_solicitante": usuario.get("nome", ""), "email_solicitante": usuario.get("email", ""), "equipamento": eq, "descricao": desc, "horario_inicio": hora, "data_abertura": agora, "status": "Aberto", "tecnico": TECNICO_PADRAO["email"], "descricao_finalizacao": "", "data_finalizacao": ""})
-        salvar_chamados(chamados)
-        messagebox.showinfo("Chamado", f"Chamado #{novo_id} criado com sucesso!")
-        abrir_meus_chamados(janela, usuario)
+        ok, texto, chamado = criar_chamado(usuario, departamento.get(), equipamento.get(), descricao.get("1.0", "end"), inicio.get())
+        msg.config(text=texto, fg=COR_SUCESSO if ok else COR_ERRO)
+        if ok:
+            messagebox.showinfo("Chamado", texto)
+            abrir_meus_chamados(janela, usuario)
 
     botao(card, "CRIAR CHAMADO", criar)
     botao(card, "VOLTAR", lambda: abrir_inicio_usuario(janela, usuario), True)
@@ -305,9 +199,8 @@ def abrir_meus_chamados(janela, usuario):
     area.pack(fill="both", expand=True, padx=35, pady=18)
     tk.Label(area, text="Minhas solicitações", font=F_TITULO, bg=COR_FUNDO, fg=COR_AZUL_MUITO_ESCURO).pack(anchor="w")
     tree = criar_tabela(area, ["ID", "Departamento", "Equipamento", "Início", "Status"])
-    for c in carregar_chamados():
-        if c.get("email_solicitante", "").lower() == usuario.get("email", "").lower():
-            tree.insert("", "end", values=(c["id"], c["departamento"], c["equipamento"], c["horario_inicio"], c["status"]))
+    for c in chamados_do_usuario(usuario):
+        tree.insert("", "end", values=(c["id"], c["departamento"], c["equipamento"], c["horario_inicio"], c["status"]))
     botao(area, "VOLTAR PARA A CENTRAL", lambda: abrir_inicio_usuario(janela, usuario), True)
     rodape(janela)
 
@@ -341,14 +234,14 @@ def abrir_painel_tecnico(janela, tecnico):
     filtro = tk.Frame(area, bg=COR_CARTAO, highlightbackground=COR_BORDA, highlightthickness=1, padx=15, pady=12)
     filtro.pack(fill="x", pady=(8, 10))
     tk.Label(filtro, text="FILTRAR POR DEPARTAMENTO", font=F_LABEL, bg=COR_CARTAO, fg=COR_TEXTO).pack(side="left", padx=(0, 10))
-    departamentos = ["Todos"] + sorted(set(c.get("departamento", "") for c in carregar_chamados() if c.get("departamento")))
-    combo = ttk.Combobox(filtro, values=departamentos, state="readonly", width=25)
+    combo = ttk.Combobox(filtro, values=["Todos"] + departamentos(), state="readonly", width=25)
     combo.set("Todos")
     combo.pack(side="left")
     tree = criar_tabela(area, ["ID", "Departamento", "Solicitante", "Equipamento", "Início", "Status"])
 
     def atualizar(*_):
-        for item in tree.get_children(): tree.delete(item)
+        for item in tree.get_children():
+            tree.delete(item)
         filtro_dep = combo.get()
         for c in carregar_chamados():
             if filtro_dep != "Todos" and c.get("departamento") != filtro_dep:
@@ -361,7 +254,8 @@ def abrir_painel_tecnico(janela, tecnico):
     def detalhes():
         selecionado = tree.selection()
         if not selecionado:
-            messagebox.showwarning("Chamado", "Selecione um chamado."); return
+            messagebox.showwarning("Chamado", "Selecione um chamado.")
+            return
         id_chamado = tree.item(selecionado[0], "values")[0]
         chamado = next((c for c in carregar_chamados() if str(c.get("id")) == str(id_chamado)), None)
         if chamado:
@@ -396,19 +290,11 @@ def abrir_detalhes_chamado(janela, tecnico, chamado):
         solucao.pack(fill="x")
 
         def finalizar():
-            texto = solucao.get("1.0", "end").strip()
-            if not texto:
-                messagebox.showwarning("Finalizar chamado", "Descreva o que ocorreu e o que foi feito antes de finalizar."); return
-            chamados = carregar_chamados()
-            for item in chamados:
-                if str(item.get("id")) == str(chamado.get("id")):
-                    item["status"] = "Finalizado"
-                    item["descricao_finalizacao"] = texto
-                    item["data_finalizacao"] = datetime.now().strftime("%d/%m/%Y %H:%M")
-                    item["tecnico"] = tecnico.get("email", TECNICO_PADRAO["email"])
-                    break
-            salvar_chamados(chamados)
-            messagebox.showinfo("Chamado", "Chamado finalizado com sucesso!")
+            ok, texto = finalizar_chamado(chamado.get("id"), solucao.get("1.0", "end"), tecnico)
+            if not ok:
+                messagebox.showwarning("Finalizar chamado", texto)
+                return
+            messagebox.showinfo("Chamado", texto)
             abrir_painel_tecnico(janela, tecnico)
 
         botao(card, "FINALIZAR CHAMADO", finalizar)
@@ -433,23 +319,29 @@ def abrir_chatbot(janela, usuario):
 
     def enviar():
         texto = entrada.get().strip()
-        if not texto: return
+        if not texto:
+            return
         tk.Label(historico, text="VOCÊ", font=F_LABEL, bg=COR_CARTAO, fg=COR_SEC).pack(anchor="w", pady=(8, 0))
         tk.Label(historico, text=texto, font=F_NORMAL, bg=COR_CARTAO, fg=COR_TEXTO, wraplength=850, justify="left").pack(anchor="w")
         entrada.delete(0, "end")
         entrada.config(state="disabled")
         enviar_btn.config(state="disabled")
         def consultar():
-            try: fila.put((True, assistente.perguntar(texto)))
-            except Exception as erro: fila.put((False, str(erro)))
+            try:
+                fila.put((True, assistente.perguntar(texto)))
+            except Exception as erro:
+                fila.put((False, str(erro)))
         threading.Thread(target=consultar, daemon=True).start()
 
     enviar_btn = botao(area, "ENVIAR", enviar)
     def verificar():
-        try: ok, resposta = fila.get_nowait()
+        try:
+            ok, resposta = fila.get_nowait()
         except queue.Empty:
-            janela.after(100, verificar); return
-        entrada.config(state="normal"); enviar_btn.config(state="normal")
+            janela.after(100, verificar)
+            return
+        entrada.config(state="normal")
+        enviar_btn.config(state="normal")
         tk.Label(historico, text="ASSISTENTE" if ok else "ERRO", font=F_LABEL, bg=COR_CARTAO, fg=COR_AZUL if ok else COR_ERRO).pack(anchor="w", pady=(8, 0))
         tk.Label(historico, text=resposta, font=F_NORMAL, bg=COR_CARTAO, fg=COR_TEXTO, wraplength=850, justify="left").pack(anchor="w")
         janela.after(100, verificar)
