@@ -27,7 +27,10 @@ def salvar_tarefas(tarefas):
 
 
 def tarefas_do_usuario(email_usuario):
-    return [t for t in carregar_tarefas() if t.get("email_usuario", "").lower() == email_usuario.lower()]
+    return [
+        t for t in carregar_tarefas()
+        if t.get("email_usuario", "").lower() == email_usuario.lower()
+    ]
 
 
 def criar_tarefa(email_usuario, titulo, descricao, prioridade, prazo="", projeto_id=None):
@@ -73,7 +76,11 @@ def concluir_tarefa(email_usuario, id_tarefa):
         tarefa["concluida"] = True
         tarefa["data_conclusao"] = datetime.now().strftime("%d/%m/%Y %H:%M")
         salvar_tarefas(tarefas)
-        registrar_evento(email_usuario, "tarefa_concluida", f'Tarefa concluída: "{tarefa.get("titulo", "")}"')
+        registrar_evento(
+            email_usuario,
+            "tarefa_concluida",
+            f'Tarefa concluída: "{tarefa.get("titulo", "")}"',
+        )
         return True, "Tarefa concluída!"
 
     return False, "Tarefa não encontrada."
@@ -85,7 +92,10 @@ def excluir_tarefa(email_usuario, id_tarefa):
     removida = None
 
     for tarefa in tarefas:
-        if str(tarefa.get("id")) == str(id_tarefa) and tarefa.get("email_usuario", "").lower() == email_usuario.lower():
+        if (
+            str(tarefa.get("id")) == str(id_tarefa)
+            and tarefa.get("email_usuario", "").lower() == email_usuario.lower()
+        ):
             removida = tarefa
         else:
             novas.append(tarefa)
@@ -94,7 +104,11 @@ def excluir_tarefa(email_usuario, id_tarefa):
         return False, "Tarefa não encontrada."
 
     salvar_tarefas(novas)
-    registrar_evento(email_usuario, "tarefa_excluida", f'Tarefa excluída: "{removida.get("titulo", "")}"')
+    registrar_evento(
+        email_usuario,
+        "tarefa_excluida",
+        f'Tarefa excluída: "{removida.get("titulo", "")}"',
+    )
     return True, "Tarefa excluída."
 
 
@@ -108,7 +122,17 @@ def salvar_projetos(projetos):
 
 
 def projetos_do_usuario(email_usuario):
-    return [p for p in carregar_projetos() if p.get("email_usuario", "").lower() == email_usuario.lower()]
+    return [
+        p for p in carregar_projetos()
+        if p.get("email_usuario", "").lower() == email_usuario.lower()
+    ]
+
+
+def buscar_projeto(email_usuario, projeto_id):
+    for projeto in projetos_do_usuario(email_usuario):
+        if str(projeto.get("id")) == str(projeto_id):
+            return projeto
+    return None
 
 
 def criar_projeto(email_usuario, nome, descricao):
@@ -130,6 +154,47 @@ def criar_projeto(email_usuario, nome, descricao):
     salvar_projetos(projetos)
     registrar_evento(email_usuario, "projeto_criado", f'Projeto criado: "{nome}"')
     return True, "Projeto criado com sucesso!", projeto
+
+
+def excluir_projeto(email_usuario, projeto_id):
+    projetos = carregar_projetos()
+    removido = None
+    novos_projetos = []
+
+    for projeto in projetos:
+        if (
+            str(projeto.get("id")) == str(projeto_id)
+            and projeto.get("email_usuario", "").lower() == email_usuario.lower()
+        ):
+            removido = projeto
+        else:
+            novos_projetos.append(projeto)
+
+    if removido is None:
+        return False, "Projeto não encontrado."
+
+    salvar_projetos(novos_projetos)
+
+    # As tarefas continuam existindo, mas deixam de pertencer ao projeto excluído.
+    tarefas = carregar_tarefas()
+    alterou_tarefas = False
+    for tarefa in tarefas:
+        if (
+            tarefa.get("email_usuario", "").lower() == email_usuario.lower()
+            and str(tarefa.get("projeto_id")) == str(projeto_id)
+        ):
+            tarefa["projeto_id"] = None
+            alterou_tarefas = True
+
+    if alterou_tarefas:
+        salvar_tarefas(tarefas)
+
+    registrar_evento(
+        email_usuario,
+        "projeto_excluido",
+        f'Projeto excluído: "{removido.get("nome", "")}"',
+    )
+    return True, "Projeto excluído. As tarefas foram mantidas."
 
 
 def progresso_projeto(email_usuario, projeto_id):
