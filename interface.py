@@ -1,349 +1,538 @@
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox
 
-from assistente import AssistenteFoundry
 from estudos import (
     concluir_tarefa,
     criar_projeto,
     criar_tarefa,
     excluir_tarefa,
-    progresso_projeto,
     projetos_do_usuario,
+    progresso_projeto,
     tarefas_do_usuario,
 )
-from historico import historico_do_usuario, registrar_evento
+from historico import historico_do_usuario
 from usuarios import autenticar, cadastrar_usuario
 
-COR_AZUL = "#0072BC"
-COR_AZUL_ESCURO = "#005A94"
-COR_AZUL_CLARO = "#EAF5FC"
-COR_FUNDO = "#F5F7FA"
-COR_CARTAO = "#FFFFFF"
-COR_TEXTO = "#172B4D"
-COR_SEC = "#667085"
-COR_BORDA = "#DCE4EC"
-COR_SUCESSO = "#16803C"
-COR_ERRO = "#C62828"
 
-F_TITULO = ("Arial", 25, "bold")
-F_SECAO = ("Arial", 16, "bold")
-F_NORMAL = ("Arial", 11)
-F_LABEL = ("Arial", 10, "bold")
-F_BOTAO = ("Arial", 10, "bold")
-F_PEQUENA = ("Arial", 9)
+# Cores simples para manter a interface organizada.
+FUNDO = "#f4f4f4"
+BRANCO = "#ffffff"
+TEXTO = "#222222"
+DESTAQUE = "#222222"
 
 
 class Aplicacao(tk.Tk):
-    """Aplicação principal do UNIMAR Study."""
+    """Janela principal do UNIMAR Study.
+
+    A aplicação foi organizada com os conceitos apresentados nas Aulas 1 e 2:
+    Tk, mainloop, Frame, Label, Entry, Text, Button, Checkbutton,
+    Radiobutton, StringVar, BooleanVar, grid, pack, bind e messagebox.
+    """
 
     def __init__(self):
         super().__init__()
-        self.title("UNIMAR Study | Organize. Estude. Evolua.")
-        self.geometry("1100x760")
-        self.minsize(850, 620)
-        self.configure(bg=COR_FUNDO)
+
+        self.title("UNIMAR Study")
+        self.geometry("700x520")
+        self.minsize(600, 450)
+        self.configure(bg=FUNDO)
+
         self.usuario_atual = None
-        self.assistente = AssistenteFoundry()
-        self.bind("<Escape>", lambda e: self.mostrar_dashboard() if self.usuario_atual else None)
+        self.bind("<Escape>", lambda evento: self.mostrar_inicio())
+
         self.mostrar_login()
 
     def limpar(self):
+        """Remove os widgets da tela atual."""
         for widget in self.winfo_children():
             widget.destroy()
 
-    def cabecalho(self, subtitulo):
-        frame = tk.Frame(self, bg=COR_AZUL, height=78)
-        frame.pack(fill="x")
-        frame.pack_propagate(False)
-        tk.Label(frame, text="UNIMAR STUDY", font=("Arial", 22, "bold"), bg=COR_AZUL, fg="white").pack(side="left", padx=30)
-        tk.Label(frame, text=subtitulo.upper(), font=("Arial", 9, "bold"), bg=COR_AZUL, fg="white").pack(side="right", padx=30)
+    def titulo(self, texto, tamanho=22):
+        label = tk.Label(
+            self,
+            text=texto,
+            font=("Arial", tamanho, "bold"),
+            bg=FUNDO,
+            fg=TEXTO,
+        )
+        label.pack(pady=(25, 10))
+        return label
 
-    def rodape(self):
-        frame = tk.Frame(self, bg="white", height=34, highlightbackground=COR_BORDA, highlightthickness=1)
-        frame.pack(side="bottom", fill="x")
-        frame.pack_propagate(False)
-        tk.Label(frame, text="UNIMAR STUDY • ORGANIZE. ESTUDE. EVOLUA.", font=("Arial", 8, "bold"), bg="white", fg=COR_SEC).pack(side="left", padx=20)
+    def campo(self, pai, texto, variavel, senha=False):
+        tk.Label(
+            pai,
+            text=texto,
+            font=("Arial", 11),
+            bg=BRANCO,
+            fg=TEXTO,
+        ).pack(anchor="w", pady=(8, 3))
 
-    def botao(self, parent, texto, comando, secundario=False):
-        botao = tk.Button(parent, text=texto, command=comando, font=F_BOTAO, cursor="hand2", padx=12, pady=8,
-                          bg="white" if secundario else COR_AZUL, fg=COR_AZUL if secundario else "white",
-                          activebackground=COR_AZUL_CLARO if secundario else COR_AZUL_ESCURO,
-                          activeforeground=COR_AZUL if secundario else "white",
-                          relief="solid" if secundario else "flat", bd=1 if secundario else 0)
-        botao.pack(fill="x", pady=4)
-        return botao
+        entry = tk.Entry(
+            pai,
+            textvariable=variavel,
+            font=("Arial", 11),
+            show="*" if senha else "",
+        )
+        entry.pack(fill="x", ipady=6)
+        return entry
 
-    def campo(self, parent, texto, variable=None, show=None):
-        tk.Label(parent, text=texto.upper(), font=F_LABEL, bg=COR_CARTAO, fg=COR_TEXTO).pack(anchor="w", pady=(5, 4))
-        entrada = tk.Entry(parent, textvariable=variable, show=show or "", font=F_NORMAL, bg=COR_FUNDO,
-                           fg=COR_TEXTO, relief="flat", highlightthickness=1, highlightbackground=COR_BORDA,
-                           highlightcolor=COR_AZUL)
-        entrada.pack(fill="x", ipady=7, pady=(0, 6))
-        return entrada
+    def botao(self, pai, texto, comando, largura=22):
+        return tk.Button(
+            pai,
+            text=texto,
+            command=comando,
+            font=("Arial", 10, "bold"),
+            width=largura,
+            pady=7,
+            cursor="hand2",
+        )
+
+    # ---------------------------------------------------------
+    # LOGIN E CADASTRO
+    # ---------------------------------------------------------
 
     def mostrar_login(self):
-        self.usuario_atual = None
         self.limpar()
-        self.cabecalho("Acesso")
-        area = tk.Frame(self, bg=COR_FUNDO)
-        area.pack(fill="both", expand=True, padx=80, pady=45)
-        card = tk.Frame(area, bg=COR_CARTAO, highlightbackground=COR_BORDA, highlightthickness=1, padx=38, pady=30)
-        card.pack(fill="x", padx=100)
-        tk.Label(card, text="Bem-vindo de volta", font=F_TITULO, bg=COR_CARTAO, fg=COR_AZUL_ESCURO).pack(anchor="w")
-        tk.Label(card, text="Organize suas tarefas, acompanhe seus projetos e evolua nos estudos.",
-                 font=F_NORMAL, bg=COR_CARTAO, fg=COR_SEC, wraplength=650).pack(anchor="w", pady=(4, 20))
+        self.usuario_atual = None
+
+        self.titulo("UNIMAR STUDY", 24)
+        tk.Label(
+            self,
+            text="Organize seus estudos de forma simples.",
+            bg=FUNDO,
+            fg="#555555",
+            font=("Arial", 11),
+        ).pack()
+
+        caixa = tk.Frame(self, bg=BRANCO, padx=35, pady=25)
+        caixa.pack(pady=25, ipadx=20)
+
         email = tk.StringVar()
         senha = tk.StringVar()
-        entrada_email = self.campo(card, "Email", email)
-        self.campo(card, "Senha", senha, "*")
-        mensagem = tk.Label(card, text="", font=F_PEQUENA, bg=COR_CARTAO)
-        mensagem.pack(fill="x", pady=3)
+
+        self.campo(caixa, "E-mail", email)
+        self.campo(caixa, "Senha", senha, senha=True)
 
         def entrar():
             usuario = autenticar(email.get(), senha.get())
             if usuario is None:
-                mensagem.config(text="Email ou senha incorretos.", fg=COR_ERRO)
+                messagebox.showerror("Login", "E-mail ou senha incorretos.")
                 return
-            self.usuario_atual = usuario
-            registrar_evento(usuario["email"], "login", "Usuário realizou login.")
-            self.mostrar_dashboard()
 
-        self.botao(card, "ENTRAR", entrar)
-        self.botao(card, "CRIAR CONTA", self.mostrar_cadastro, True)
-        entrada_email.bind("<Return>", lambda e: entrar())
-        entrada_email.focus_set()
-        self.rodape()
+            self.usuario_atual = usuario
+            self.mostrar_inicio()
+
+        self.botao(caixa, "ENTRAR", entrar).pack(pady=(18, 8))
+        self.botao(caixa, "CRIAR CONTA", self.mostrar_cadastro).pack()
 
     def mostrar_cadastro(self):
         self.limpar()
-        self.cabecalho("Novo cadastro")
-        area = tk.Frame(self, bg=COR_FUNDO)
-        area.pack(fill="both", expand=True, padx=100, pady=30)
-        card = tk.Frame(area, bg=COR_CARTAO, highlightbackground=COR_BORDA, highlightthickness=1, padx=35, pady=25)
-        card.pack(fill="x")
-        tk.Label(card, text="Criar sua conta", font=F_TITULO, bg=COR_CARTAO, fg=COR_AZUL_ESCURO).pack(anchor="w")
-        tk.Label(card, text="Seu histórico, tarefas e projetos serão vinculados à sua conta.", font=F_NORMAL,
-                 bg=COR_CARTAO, fg=COR_SEC).pack(anchor="w", pady=(3, 18))
-        nome, email, senha, confirmar = (tk.StringVar() for _ in range(4))
-        self.campo(card, "Nome", nome)
-        self.campo(card, "Email", email)
-        self.campo(card, "Senha", senha, "*")
-        self.campo(card, "Confirmar senha", confirmar, "*")
-        mensagem = tk.Label(card, text="", font=F_PEQUENA, bg=COR_CARTAO)
-        mensagem.pack(fill="x")
+        self.titulo("CRIAR CONTA")
+
+        caixa = tk.Frame(self, bg=BRANCO, padx=35, pady=20)
+        caixa.pack(pady=10, ipadx=20)
+
+        nome = tk.StringVar()
+        email = tk.StringVar()
+        senha = tk.StringVar()
+        confirmar = tk.StringVar()
+
+        self.campo(caixa, "Nome", nome)
+        self.campo(caixa, "E-mail", email)
+        self.campo(caixa, "Senha", senha, senha=True)
+        self.campo(caixa, "Confirmar senha", confirmar, senha=True)
 
         def cadastrar():
-            ok, texto = cadastrar_usuario(nome.get(), email.get(), senha.get(), confirmar.get())
-            mensagem.config(text=texto, fg=COR_SUCESSO if ok else COR_ERRO)
-            if ok:
-                messagebox.showinfo("Cadastro", texto)
-                self.mostrar_login()
+            sucesso, mensagem = cadastrar_usuario(
+                nome.get(), email.get(), senha.get(), confirmar.get()
+            )
 
-        self.botao(card, "CADASTRAR", cadastrar)
-        self.botao(card, "VOLTAR PARA O LOGIN", self.mostrar_login, True)
-        self.rodape()
+            if not sucesso:
+                messagebox.showerror("Cadastro", mensagem)
+                return
 
-    def criar_menu(self, parent):
-        menu = tk.Frame(parent, bg=COR_CARTAO, width=190, highlightbackground=COR_BORDA, highlightthickness=1)
-        menu.pack(side="left", fill="y", padx=(0, 15))
-        menu.pack_propagate(False)
-        tk.Label(menu, text="MENU", font=F_LABEL, bg=COR_CARTAO, fg=COR_SEC).pack(anchor="w", padx=18, pady=(18, 10))
-        for texto, comando in (("Dashboard", self.mostrar_dashboard), ("Minhas tarefas", self.mostrar_tarefas),
-                               ("Meus projetos", self.mostrar_projetos), ("Histórico", self.mostrar_historico),
-                               ("Assistente", self.mostrar_assistente)):
-            self.botao(menu, texto, comando)
-        tk.Frame(menu, bg=COR_CARTAO).pack(fill="both", expand=True)
-        self.botao(menu, "Sair", self.mostrar_login, True)
+            messagebox.showinfo("Cadastro", mensagem)
+            self.mostrar_login()
 
-    def area_principal(self, titulo, descricao):
+        botoes = tk.Frame(caixa, bg=BRANCO)
+        botoes.pack(pady=(18, 0))
+
+        self.botao(botoes, "CADASTRAR", cadastrar, 15).pack(side="left", padx=5)
+        self.botao(botoes, "VOLTAR", self.mostrar_login, 15).pack(side="left", padx=5)
+
+    # ---------------------------------------------------------
+    # INÍCIO
+    # ---------------------------------------------------------
+
+    def mostrar_inicio(self):
+        if self.usuario_atual is None:
+            self.mostrar_login()
+            return
+
         self.limpar()
-        self.cabecalho(titulo)
-        area = tk.Frame(self, bg=COR_FUNDO)
-        area.pack(fill="both", expand=True, padx=25, pady=25)
-        self.criar_menu(area)
-        conteudo = tk.Frame(area, bg=COR_FUNDO)
-        conteudo.pack(side="left", fill="both", expand=True)
-        tk.Label(conteudo, text=titulo, font=F_TITULO, bg=COR_FUNDO, fg=COR_AZUL_ESCURO).pack(anchor="w")
-        if descricao:
-            tk.Label(conteudo, text=descricao, font=F_NORMAL, bg=COR_FUNDO, fg=COR_SEC).pack(anchor="w", pady=(3, 15))
-        return conteudo
+        self.titulo("UNIMAR STUDY")
 
-    def mostrar_dashboard(self):
-        if not self.usuario_atual:
-            return self.mostrar_login()
-        conteudo = self.area_principal("Dashboard", "Um resumo da sua rotina de estudos.")
-        tarefas = tarefas_do_usuario(self.usuario_atual["email"])
-        projetos = projetos_do_usuario(self.usuario_atual["email"])
-        concluidas = sum(1 for t in tarefas if t.get("concluida"))
-        cards = tk.Frame(conteudo, bg=COR_FUNDO)
-        cards.pack(fill="x")
-        for coluna, (titulo, valor) in enumerate((("Tarefas", len(tarefas)), ("Pendentes", len(tarefas)-concluidas), ("Concluídas", concluidas), ("Projetos", len(projetos)))):
-            card = tk.Frame(cards, bg=COR_CARTAO, padx=18, pady=15, highlightbackground=COR_BORDA, highlightthickness=1)
-            card.grid(row=0, column=coluna, sticky="nsew", padx=4)
-            tk.Label(card, text=titulo, font=F_LABEL, bg=COR_CARTAO, fg=COR_SEC).pack(anchor="w")
-            tk.Label(card, text=str(valor), font=("Arial", 25, "bold"), bg=COR_CARTAO, fg=COR_AZUL_ESCURO).pack(anchor="w", pady=(5, 0))
-            cards.columnconfigure(coluna, weight=1)
-        destaque = tk.Frame(conteudo, bg=COR_CARTAO, padx=20, pady=18, highlightbackground=COR_BORDA, highlightthickness=1)
-        destaque.pack(fill="both", expand=True, pady=18)
-        tk.Label(destaque, text="Próximas tarefas", font=F_SECAO, bg=COR_CARTAO, fg=COR_TEXTO).pack(anchor="w")
-        pendentes = [t for t in tarefas if not t.get("concluida")][:6]
-        if not pendentes:
-            tk.Label(destaque, text="Nenhuma tarefa pendente.", font=F_NORMAL, bg=COR_CARTAO, fg=COR_SUCESSO).pack(anchor="w", pady=15)
-        for tarefa in pendentes:
-            tk.Label(destaque, text=f"• {tarefa['titulo']} — {tarefa.get('prioridade', 'Média')}", font=F_NORMAL, bg=COR_CARTAO, fg=COR_TEXTO).pack(anchor="w", pady=4)
-        self.rodape()
+        nome = self.usuario_atual.get("nome", "Aluno")
+        tk.Label(
+            self,
+            text=f"Olá, {nome}!",
+            font=("Arial", 13),
+            bg=FUNDO,
+            fg=TEXTO,
+        ).pack(pady=(0, 20))
+
+        menu = tk.Frame(self, bg=FUNDO)
+        menu.pack()
+
+        # grid demonstra a organização dos widgets em linhas e colunas.
+        botoes = [
+            ("TAREFAS", self.mostrar_tarefas),
+            ("PROJETOS", self.mostrar_projetos),
+            ("HISTÓRICO", self.mostrar_historico),
+            ("ASSISTENTE", self.mostrar_assistente),
+        ]
+
+        for indice, (texto, comando) in enumerate(botoes):
+            linha = indice // 2
+            coluna = indice % 2
+            self.botao(menu, texto, comando, 20).grid(
+                row=linha,
+                column=coluna,
+                padx=8,
+                pady=8,
+            )
+
+        self.botao(self, "SAIR", self.mostrar_login, 20).pack(pady=25)
+
+    # ---------------------------------------------------------
+    # TAREFAS
+    # ---------------------------------------------------------
 
     def mostrar_tarefas(self):
-        conteudo = self.area_principal("Minhas tarefas", "Crie, conclua e acompanhe suas atividades.")
-        self.botao(conteudo, "+ NOVA TAREFA", self.mostrar_nova_tarefa)
-        lista = tk.Frame(conteudo, bg=COR_CARTAO, highlightbackground=COR_BORDA, highlightthickness=1)
-        lista.pack(fill="both", expand=True, pady=12)
-        tarefas = tarefas_do_usuario(self.usuario_atual["email"])
-        if not tarefas:
-            tk.Label(lista, text="Você ainda não possui tarefas.", font=F_NORMAL, bg=COR_CARTAO, fg=COR_SEC).pack(pady=40)
-        for tarefa in tarefas:
-            linha = tk.Frame(lista, bg=COR_CARTAO, padx=15, pady=9)
-            linha.pack(fill="x")
-            estado = tk.BooleanVar(value=tarefa.get("concluida", False))
-            tk.Checkbutton(linha, variable=estado, bg=COR_CARTAO, activebackground=COR_CARTAO,
-                           command=lambda i=tarefa["id"]: self.alternar_tarefa(i)).pack(side="left")
-            texto = f"{tarefa['titulo']}  |  {tarefa.get('prioridade', 'Média')}"
-            if tarefa.get("prazo"):
-                texto += f"  |  Prazo: {tarefa['prazo']}"
-            tk.Label(linha, text=texto, font=F_NORMAL, bg=COR_CARTAO,
-                     fg=COR_SEC if tarefa.get("concluida") else COR_TEXTO).pack(side="left", fill="x", expand=True)
-            tk.Button(linha, text="Excluir", command=lambda i=tarefa["id"]: self.excluir_tarefa(i), font=F_PEQUENA,
-                      bg="white", relief="flat").pack(side="right")
-        self.rodape()
+        self.limpar()
+        self.titulo("MINHAS TAREFAS")
 
-    def alternar_tarefa(self, id_tarefa):
-        ok, texto = concluir_tarefa(self.usuario_atual["email"], id_tarefa)
-        if not ok:
-            messagebox.showinfo("Tarefa", texto)
+        topo = tk.Frame(self, bg=FUNDO)
+        topo.pack(fill="x", padx=30)
+
+        self.botao(topo, "+ NOVA TAREFA", self.mostrar_nova_tarefa, 18).pack(side="left")
+        self.botao(topo, "VOLTAR", self.mostrar_inicio, 12).pack(side="right")
+
+        lista = tk.Frame(self, bg=BRANCO, padx=15, pady=10)
+        lista.pack(fill="both", expand=True, padx=30, pady=15)
+
+        tarefas = tarefas_do_usuario(self.usuario_atual["email"])
+
+        if not tarefas:
+            tk.Label(
+                lista,
+                text="Nenhuma tarefa cadastrada.",
+                bg=BRANCO,
+                fg="#555555",
+                font=("Arial", 11),
+            ).pack(pady=30)
+            return
+
+        for tarefa in tarefas:
+            linha = tk.Frame(lista, bg=BRANCO)
+            linha.pack(fill="x", pady=6)
+
+            concluida = tk.BooleanVar(value=tarefa.get("concluida", False))
+            check = tk.Checkbutton(
+                linha,
+                text=tarefa.get("titulo", ""),
+                variable=concluida,
+                bg=BRANCO,
+                font=("Arial", 11),
+                anchor="w",
+                command=lambda id_tarefa=tarefa["id"]: self.concluir(id_tarefa),
+            )
+            check.pack(side="left", fill="x", expand=True)
+
+            prioridade = tarefa.get("prioridade", "Média")
+            tk.Label(
+                linha,
+                text=prioridade,
+                bg=BRANCO,
+                fg="#555555",
+                width=8,
+            ).pack(side="left")
+
+            self.botao(
+                linha,
+                "EXCLUIR",
+                lambda id_tarefa=tarefa["id"]: self.excluir(id_tarefa),
+                8,
+            ).pack(side="right", padx=5)
+
+    def concluir(self, id_tarefa):
+        sucesso, mensagem = concluir_tarefa(
+            self.usuario_atual["email"],
+            id_tarefa,
+        )
+        if not sucesso:
+            messagebox.showwarning("Tarefa", mensagem)
         self.mostrar_tarefas()
 
-    def excluir_tarefa(self, id_tarefa):
-        if not messagebox.askyesno("Excluir tarefa", "Deseja realmente excluir esta tarefa?"):
+    def excluir(self, id_tarefa):
+        confirmar = messagebox.askyesno(
+            "Excluir tarefa",
+            "Deseja realmente excluir esta tarefa?",
+        )
+        if not confirmar:
             return
-        ok, texto = excluir_tarefa(self.usuario_atual["email"], id_tarefa)
-        if ok:
-            self.mostrar_tarefas()
+
+        sucesso, mensagem = excluir_tarefa(
+            self.usuario_atual["email"],
+            id_tarefa,
+        )
+        if sucesso:
+            messagebox.showinfo("Tarefa", mensagem)
         else:
-            messagebox.showwarning("Tarefa", texto)
+            messagebox.showerror("Tarefa", mensagem)
+        self.mostrar_tarefas()
 
     def mostrar_nova_tarefa(self):
         self.limpar()
-        self.cabecalho("Nova tarefa")
-        area = tk.Frame(self, bg=COR_FUNDO)
-        area.pack(fill="both", expand=True, padx=90, pady=30)
-        card = tk.Frame(area, bg=COR_CARTAO, padx=30, pady=25, highlightbackground=COR_BORDA, highlightthickness=1)
-        card.pack(fill="both", expand=True)
-        tk.Label(card, text="Criar tarefa", font=F_TITULO, bg=COR_CARTAO, fg=COR_AZUL_ESCURO).pack(anchor="w")
-        titulo, prazo, prioridade = tk.StringVar(), tk.StringVar(), tk.StringVar(value="Média")
-        self.campo(card, "Título", titulo)
-        self.campo(card, "Prazo (opcional)", prazo)
-        tk.Label(card, text="PRIORIDADE", font=F_LABEL, bg=COR_CARTAO, fg=COR_TEXTO).pack(anchor="w", pady=(5, 4))
-        prioridades = tk.Frame(card, bg=COR_CARTAO)
-        prioridades.pack(anchor="w")
-        for valor in ("Baixa", "Média", "Alta"):
-            tk.Radiobutton(prioridades, text=valor, value=valor, variable=prioridade, bg=COR_CARTAO, activebackground=COR_CARTAO).pack(side="left", padx=(0, 12))
-        tk.Label(card, text="DESCRIÇÃO", font=F_LABEL, bg=COR_CARTAO, fg=COR_TEXTO).pack(anchor="w", pady=(12, 4))
-        descricao = tk.Text(card, height=8, font=F_NORMAL, bg=COR_FUNDO, relief="flat", highlightthickness=1, highlightbackground=COR_BORDA)
-        descricao.pack(fill="both", expand=True)
+        self.titulo("NOVA TAREFA")
+
+        caixa = tk.Frame(self, bg=BRANCO, padx=35, pady=20)
+        caixa.pack(pady=10, fill="x", padx=70)
+
+        titulo = tk.StringVar()
+        prioridade = tk.StringVar(value="Média")
+        prazo = tk.StringVar()
+
+        self.campo(caixa, "Título", titulo)
+
+        tk.Label(
+            caixa,
+            text="Descrição",
+            bg=BRANCO,
+            fg=TEXTO,
+            font=("Arial", 11),
+        ).pack(anchor="w", pady=(8, 3))
+
+        descricao = tk.Text(caixa, height=4, font=("Arial", 11))
+        descricao.pack(fill="x")
+
+        tk.Label(
+            caixa,
+            text="Prioridade",
+            bg=BRANCO,
+            fg=TEXTO,
+            font=("Arial", 11),
+        ).pack(anchor="w", pady=(10, 3))
+
+        opcoes = tk.Frame(caixa, bg=BRANCO)
+        opcoes.pack(anchor="w")
+
+        # Radiobutton permite escolher apenas uma prioridade.
+        for opcao in ("Baixa", "Média", "Alta"):
+            tk.Radiobutton(
+                opcoes,
+                text=opcao,
+                variable=prioridade,
+                value=opcao,
+                bg=BRANCO,
+            ).pack(side="left", padx=(0, 12))
+
+        self.campo(caixa, "Prazo (opcional)", prazo)
+
+        botoes = tk.Frame(caixa, bg=BRANCO)
+        botoes.pack(pady=18)
 
         def salvar():
-            ok, texto, _ = criar_tarefa(self.usuario_atual["email"], titulo.get(), descricao.get("1.0", "end"), prioridade.get(), prazo.get())
-            if ok:
-                messagebox.showinfo("Tarefa", texto)
+            sucesso, mensagem, _ = criar_tarefa(
+                self.usuario_atual["email"],
+                titulo.get(),
+                descricao.get("1.0", "end").strip(),
+                prioridade.get(),
+                prazo.get(),
+            )
+
+            if sucesso:
+                messagebox.showinfo("Tarefa", mensagem)
                 self.mostrar_tarefas()
             else:
-                messagebox.showwarning("Tarefa", texto)
+                messagebox.showerror("Tarefa", mensagem)
 
-        self.botao(card, "CRIAR TAREFA", salvar)
-        self.botao(card, "VOLTAR", self.mostrar_tarefas, True)
-        self.rodape()
+        self.botao(botoes, "SALVAR", salvar, 15).pack(side="left", padx=5)
+        self.botao(botoes, "CANCELAR", self.mostrar_tarefas, 15).pack(side="left", padx=5)
+
+    # ---------------------------------------------------------
+    # PROJETOS
+    # ---------------------------------------------------------
 
     def mostrar_projetos(self):
-        conteudo = self.area_principal("Meus projetos", "Organize trabalhos escolares e acompanhe o progresso.")
-        self.botao(conteudo, "+ NOVO PROJETO", self.mostrar_novo_projeto)
-        lista = tk.Frame(conteudo, bg=COR_FUNDO)
-        lista.pack(fill="both", expand=True, pady=12)
+        self.limpar()
+        self.titulo("MEUS PROJETOS")
+
+        topo = tk.Frame(self, bg=FUNDO)
+        topo.pack(fill="x", padx=30)
+
+        self.botao(topo, "+ NOVO PROJETO", self.mostrar_novo_projeto, 18).pack(side="left")
+        self.botao(topo, "VOLTAR", self.mostrar_inicio, 12).pack(side="right")
+
+        lista = tk.Frame(self, bg=BRANCO, padx=20, pady=15)
+        lista.pack(fill="both", expand=True, padx=30, pady=15)
+
         projetos = projetos_do_usuario(self.usuario_atual["email"])
+
         if not projetos:
-            tk.Label(lista, text="Crie seu primeiro projeto escolar.", font=F_NORMAL, bg=COR_FUNDO, fg=COR_SEC).pack(pady=40)
+            tk.Label(
+                lista,
+                text="Nenhum projeto cadastrado.",
+                bg=BRANCO,
+                fg="#555555",
+            ).pack(pady=30)
+            return
+
         for projeto in projetos:
-            total, concluidas, percentual = progresso_projeto(self.usuario_atual["email"], projeto["id"])
-            card = tk.Frame(lista, bg=COR_CARTAO, padx=18, pady=15, highlightbackground=COR_BORDA, highlightthickness=1)
-            card.pack(fill="x", pady=5)
-            tk.Label(card, text=projeto["nome"], font=F_SECAO, bg=COR_CARTAO, fg=COR_TEXTO).pack(anchor="w")
-            tk.Label(card, text=projeto.get("descricao", ""), font=F_PEQUENA, bg=COR_CARTAO, fg=COR_SEC).pack(anchor="w", pady=3)
-            tk.Label(card, text=f"{concluidas} de {total} tarefas concluídas • {percentual}%", font=F_NORMAL, bg=COR_CARTAO, fg=COR_AZUL).pack(anchor="w", pady=4)
-        self.rodape()
+            total, concluidas, percentual = progresso_projeto(
+                self.usuario_atual["email"],
+                projeto["id"],
+            )
+
+            frame = tk.Frame(lista, bg=BRANCO)
+            frame.pack(fill="x", pady=8)
+
+            tk.Label(
+                frame,
+                text=projeto.get("nome", ""),
+                font=("Arial", 12, "bold"),
+                bg=BRANCO,
+                fg=TEXTO,
+            ).pack(anchor="w")
+
+            tk.Label(
+                frame,
+                text=f"{concluidas} de {total} tarefas concluídas — {percentual}%",
+                bg=BRANCO,
+                fg="#555555",
+            ).pack(anchor="w")
 
     def mostrar_novo_projeto(self):
         self.limpar()
-        self.cabecalho("Novo projeto")
-        area = tk.Frame(self, bg=COR_FUNDO)
-        area.pack(fill="both", expand=True, padx=90, pady=30)
-        card = tk.Frame(area, bg=COR_CARTAO, padx=30, pady=25, highlightbackground=COR_BORDA, highlightthickness=1)
-        card.pack(fill="both", expand=True)
-        tk.Label(card, text="Criar projeto", font=F_TITULO, bg=COR_CARTAO, fg=COR_AZUL_ESCURO).pack(anchor="w")
+        self.titulo("NOVO PROJETO")
+
+        caixa = tk.Frame(self, bg=BRANCO, padx=35, pady=20)
+        caixa.pack(pady=15, fill="x", padx=70)
+
         nome = tk.StringVar()
-        self.campo(card, "Nome do projeto", nome)
-        tk.Label(card, text="DESCRIÇÃO", font=F_LABEL, bg=COR_CARTAO, fg=COR_TEXTO).pack(anchor="w", pady=(12, 4))
-        descricao = tk.Text(card, height=10, font=F_NORMAL, bg=COR_FUNDO, relief="flat", highlightthickness=1, highlightbackground=COR_BORDA)
-        descricao.pack(fill="both", expand=True)
+        self.campo(caixa, "Nome do projeto", nome)
+
+        tk.Label(
+            caixa,
+            text="Descrição",
+            bg=BRANCO,
+            fg=TEXTO,
+        ).pack(anchor="w", pady=(10, 3))
+
+        descricao = tk.Text(caixa, height=5)
+        descricao.pack(fill="x")
+
+        botoes = tk.Frame(caixa, bg=BRANCO)
+        botoes.pack(pady=18)
 
         def salvar():
-            ok, texto, _ = criar_projeto(self.usuario_atual["email"], nome.get(), descricao.get("1.0", "end"))
-            if ok:
-                messagebox.showinfo("Projeto", texto)
+            sucesso, mensagem, _ = criar_projeto(
+                self.usuario_atual["email"],
+                nome.get(),
+                descricao.get("1.0", "end").strip(),
+            )
+
+            if sucesso:
+                messagebox.showinfo("Projeto", mensagem)
                 self.mostrar_projetos()
             else:
-                messagebox.showwarning("Projeto", texto)
+                messagebox.showerror("Projeto", mensagem)
 
-        self.botao(card, "CRIAR PROJETO", salvar)
-        self.botao(card, "VOLTAR", self.mostrar_projetos, True)
-        self.rodape()
+        self.botao(botoes, "SALVAR", salvar, 15).pack(side="left", padx=5)
+        self.botao(botoes, "CANCELAR", self.mostrar_projetos, 15).pack(side="left", padx=5)
+
+    # ---------------------------------------------------------
+    # HISTÓRICO
+    # ---------------------------------------------------------
 
     def mostrar_historico(self):
-        conteudo = self.area_principal("Histórico", "Acompanhe as ações realizadas dentro do aplicativo.")
-        tabela_frame = tk.Frame(conteudo, bg=COR_CARTAO, highlightbackground=COR_BORDA, highlightthickness=1)
-        tabela_frame.pack(fill="both", expand=True)
-        tabela = ttk.Treeview(tabela_frame, columns=("data", "tipo", "descricao"), show="headings")
-        for coluna, titulo, largura in (("data", "Data", 130), ("tipo", "Ação", 150), ("descricao", "Descrição", 400)):
-            tabela.heading(coluna, text=titulo)
-            tabela.column(coluna, width=largura, anchor="w")
-        scroll = ttk.Scrollbar(tabela_frame, orient="vertical", command=tabela.yview)
-        tabela.configure(yscrollcommand=scroll.set)
-        tabela.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
-        for evento in reversed(historico_do_usuario(self.usuario_atual["email"])):
-            tabela.insert("", "end", values=(evento.get("data", ""), evento.get("tipo", ""), evento.get("descricao", "")))
-        self.rodape()
+        self.limpar()
+        self.titulo("HISTÓRICO")
+
+        caixa = tk.Frame(self, bg=BRANCO, padx=20, pady=15)
+        caixa.pack(fill="both", expand=True, padx=30, pady=10)
+
+        eventos = historico_do_usuario(self.usuario_atual["email"])
+        eventos = list(reversed(eventos))
+
+        if not eventos:
+            tk.Label(
+                caixa,
+                text="Nenhuma atividade registrada.",
+                bg=BRANCO,
+                fg="#555555",
+            ).pack(pady=30)
+        else:
+            for evento in eventos:
+                tk.Label(
+                    caixa,
+                    text=f"{evento.get('data', '')}  -  {evento.get('descricao', '')}",
+                    bg=BRANCO,
+                    fg=TEXTO,
+                    anchor="w",
+                    justify="left",
+                ).pack(fill="x", pady=4)
+
+        self.botao(self, "VOLTAR", self.mostrar_inicio, 15).pack(pady=15)
+
+    # ---------------------------------------------------------
+    # ASSISTENTE
+    # ---------------------------------------------------------
 
     def mostrar_assistente(self):
-        conteudo = self.area_principal("Assistente de Estudos", "Peça ajuda para entender conteúdos ou organizar sua rotina.")
-        pergunta = tk.Text(conteudo, height=5, font=F_NORMAL, bg=COR_CARTAO, relief="flat", highlightthickness=1, highlightbackground=COR_BORDA)
-        pergunta.pack(fill="x")
-        resposta = tk.Text(conteudo, height=14, font=F_NORMAL, bg=COR_CARTAO, relief="flat", highlightthickness=1, highlightbackground=COR_BORDA, state="disabled")
-        resposta.pack(fill="both", expand=True, pady=12)
+        self.limpar()
+        self.titulo("ASSISTENTE DE ESTUDOS")
+
+        caixa = tk.Frame(self, bg=BRANCO, padx=25, pady=20)
+        caixa.pack(fill="both", expand=True, padx=40, pady=10)
+
+        tk.Label(
+            caixa,
+            text="Digite uma dúvida sobre seus estudos:",
+            bg=BRANCO,
+            fg=TEXTO,
+            font=("Arial", 11),
+        ).pack(anchor="w")
+
+        pergunta = tk.Text(caixa, height=5, font=("Arial", 11))
+        pergunta.pack(fill="x", pady=8)
+
+        resposta = tk.Text(caixa, height=8, font=("Arial", 10), state="disabled")
+        resposta.pack(fill="both", expand=True, pady=8)
 
         def perguntar():
             texto = pergunta.get("1.0", "end").strip()
             if not texto:
                 messagebox.showwarning("Assistente", "Digite uma pergunta.")
                 return
+
             try:
-                resultado = self.assistente.perguntar(texto)
-                registrar_evento(self.usuario_atual["email"], "assistente", "Usuário consultou o Assistente de Estudos.")
+                from assistente import AssistenteFoundry
+                assistente = AssistenteFoundry()
+                resultado = assistente.perguntar(texto)
             except Exception as erro:
-                resultado = f"Não foi possível consultar o assistente.\n\n{erro}"
+                resultado = f"Não foi possível usar o assistente agora.\n\n{erro}"
+
             resposta.config(state="normal")
             resposta.delete("1.0", "end")
             resposta.insert("1.0", resultado)
             resposta.config(state="disabled")
 
-        self.botao(conteudo, "PERGUNTAR", perguntar)
-        pergunta.bind("<Control-Return>", lambda e: perguntar())
-        self.rodape()
+        botoes = tk.Frame(caixa, bg=BRANCO)
+        botoes.pack()
+
+        self.botao(botoes, "PERGUNTAR", perguntar, 15).pack(side="left", padx=5)
+        self.botao(botoes, "VOLTAR", self.mostrar_inicio, 15).pack(side="left", padx=5)
+
+        # bind permite reagir a um evento do teclado, como visto na Aula 2.
+        pergunta.bind("<Control-Return>", lambda evento: perguntar())
